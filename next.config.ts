@@ -1,10 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Tell Next.js NOT to webpack-bundle these packages.
-  // @sparticuz/chromium uses import.meta.url to locate its binary .br files —
-  // that path breaks when bundled. puppeteer-core must follow.
+  // Don't webpack-bundle these packages — @sparticuz/chromium uses
+  // import.meta.url to locate its binary .br files, which breaks when bundled.
   serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+
+  // Next.js's file tracer only picks up JS imports, so the brotli-compressed
+  // chromium binaries under @sparticuz/chromium/bin/ get dropped from the
+  // serverless function bundle. Force-include them here.
+  outputFileTracingIncludes: {
+    "/api/convert": ["./node_modules/@sparticuz/chromium/bin/**/*"],
+  },
 
   experimental: {
     serverActions: {
