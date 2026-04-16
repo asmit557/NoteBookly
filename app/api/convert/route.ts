@@ -361,6 +361,11 @@ export async function POST(request: NextRequest) {
     });
   } catch (err: unknown) {
     const raw = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : "";
+
+    // Log to Vercel function logs so we can see what's actually failing
+    console.error("[convert] conversion failed:", raw);
+    if (stack) console.error("[convert] stack:", stack);
 
     let message = "Conversion failed.";
     if (raw.includes("timeout")) {
@@ -371,9 +376,11 @@ export async function POST(request: NextRequest) {
       message = "Chromium executable not found. Check your environment setup.";
     }
 
-    // Surface the raw cause in development so it's visible in the UI
-    const detail = process.env.NODE_ENV === "development" ? ` (${raw})` : "";
-    return NextResponse.json({ message: message + detail }, { status: 500 });
+    // Surface the raw cause so it's visible in the UI (production + dev)
+    return NextResponse.json(
+      { message: `${message} (${raw})` },
+      { status: 500 }
+    );
   } finally {
     if (browser) {
       await browser.close().catch(() => {});
