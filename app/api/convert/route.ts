@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer-core";
 import fs from "fs";
-import path from "path";
 import { marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
@@ -23,12 +22,10 @@ marked.use(
   })
 );
 
-// Inline highlight.js github theme so Puppeteer doesn't need network access
-// Use process.cwd() — safe in both CJS and ESM Next.js contexts
-const HLJS_CSS = fs.readFileSync(
-  path.join(process.cwd(), "node_modules/highlight.js/styles/github.min.css"),
-  "utf8"
-);
+// highlight.js github theme — inlined so no fs.readFileSync is needed at
+// runtime (Next.js bundles API routes with webpack; node_modules is not on
+// disk in Vercel's serverless environment at process.cwd()).
+const HLJS_CSS = `pre code.hljs{display:block;overflow-x:auto;padding:1em}code.hljs{padding:3px 5px}.hljs{color:#24292e;background:#fff}.hljs-doctag,.hljs-keyword,.hljs-meta .hljs-keyword,.hljs-template-tag,.hljs-template-variable,.hljs-type,.hljs-variable.language_{color:#d73a49}.hljs-title,.hljs-title.class_,.hljs-title.class_.inherited__,.hljs-title.function_{color:#6f42c1}.hljs-attr,.hljs-attribute,.hljs-literal,.hljs-meta,.hljs-number,.hljs-operator,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-id,.hljs-variable{color:#005cc5}.hljs-meta .hljs-string,.hljs-regexp,.hljs-string{color:#032f62}.hljs-built_in,.hljs-symbol{color:#e36209}.hljs-code,.hljs-comment,.hljs-formula{color:#6a737d}.hljs-name,.hljs-quote,.hljs-selector-pseudo,.hljs-selector-tag{color:#22863a}.hljs-subst{color:#24292e}.hljs-section{color:#005cc5;font-weight:700}.hljs-bullet{color:#735c0f}.hljs-emphasis{color:#24292e;font-style:italic}.hljs-strong{color:#24292e;font-weight:700}.hljs-addition{color:#22863a;background-color:#f0fff4}.hljs-deletion{color:#b31d28;background-color:#ffeef0}`;
 
 // ── Chromium resolution ───────────────────────────────────────────────────────
 // @sparticuz/chromium ships a Linux binary for Lambda/Vercel.
