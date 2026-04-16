@@ -102,7 +102,7 @@ function escapeHtml(text: string): string {
 
 function renderOutput(output: NotebookOutput): string {
   if (output.output_type === "stream") {
-    return `<pre class="output stream">${escapeHtml(joinSource(output.text ?? ""))}</pre>`;
+    return `<div class="output-block stream"><pre class="output">${escapeHtml(joinSource(output.text ?? ""))}</pre></div>`;
   }
 
   if (
@@ -110,21 +110,39 @@ function renderOutput(output: NotebookOutput): string {
     output.output_type === "execute_result"
   ) {
     const data = output.data ?? {};
-    if (data["text/plain"]) {
-      return `<pre class="output">${escapeHtml(joinSource(data["text/plain"]))}</pre>`;
+
+    // Priority 1 — images (matplotlib figures, PIL, etc.).
+    // Checked first because matplotlib emits text/plain "<Figure size ...>"
+    // alongside image/png; text-first would drop the actual figure.
+    if (data["image/png"]) {
+      const b64 = joinSource(data["image/png"]).replace(/\s/g, "");
+      return `<div class="output-block image"><img src="data:image/png;base64,${b64}" class="output-image" alt="figure" /></div>`;
     }
+    if (data["image/jpeg"]) {
+      const b64 = joinSource(data["image/jpeg"]).replace(/\s/g, "");
+      return `<div class="output-block image"><img src="data:image/jpeg;base64,${b64}" class="output-image" alt="figure" /></div>`;
+    }
+    if (data["image/svg+xml"]) {
+      return `<div class="output-block image"><div class="output-svg">${joinSource(data["image/svg+xml"])}</div></div>`;
+    }
+
+    // Priority 2 — rich HTML (pandas DataFrames, etc.)
     if (data["text/html"]) {
-      return `<div class="output html-output">${joinSource(data["text/html"])}</div>`;
+      return `<div class="output-block html"><div class="html-output">${joinSource(data["text/html"])}</div></div>`;
+    }
+
+    // Priority 3 — plain text fallback
+    if (data["text/plain"]) {
+      return `<div class="output-block"><pre class="output">${escapeHtml(joinSource(data["text/plain"]))}</pre></div>`;
     }
   }
 
   if (output.output_type === "error") {
-    // Strip ANSI escape codes from tracebacks
     const raw = (output.traceback ?? [])
       .join("\n")
       // eslint-disable-next-line no-control-regex
       .replace(/\x1b\[[0-9;]*m/g, "");
-    return `<pre class="output error">${escapeHtml(raw)}</pre>`;
+    return `<div class="output-block error"><pre class="output">${escapeHtml(raw)}</pre></div>`;
   }
 
   return "";
@@ -249,9 +267,8 @@ tr:nth-child(even) td { background: #f8fafc; }
 hr { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
 
 /* ── Cell containers ── */
-.cell { margin-bottom: 20px; }
-.cell.markdown { }
-.cell.code { }
+.cell { margin-bottom: 32px; }
+.cell.markdown { margin-bottom: 24px; }
 .cell.raw pre {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
@@ -261,27 +278,48 @@ hr { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
   font-size: 13px;
 }
 
-/* ── Cell outputs ── */
-.output {
+/* ── Output containers ── */
+.output-block {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-left: 4px solid #6366f1;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+.output-block.stream { border-left-color: #60a5fa; background: #eff6ff; }
+.output-block.error  { border-left-color: #f87171; background: #fef2f2; }
+.output-block.image  { padding: 14px; background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #a78bfa; text-align: center; }
+.output-block.html   { padding: 14px; }
+
+/* ── Output text content ── */
+.output-block pre.output {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 13px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-left: 3px solid #94a3b8;
-  border-radius: 0 6px 6px 0;
-  padding: 10px 14px;
-  margin-top: 6px;
+  background: transparent;
+  color: #334155;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
   white-space: pre-wrap;
   overflow-wrap: break-word;
-  color: #334155;
+  line-height: 1.55;
 }
-.output.stream { border-left-color: #60a5fa; background: #eff6ff; }
-.output.error  {
-  border-left-color: #f87171;
-  background: #fef2f2;
-  color: #b91c1c;
+.output-block.error pre.output { color: #b91c1c; }
+
+/* ── Output images ── */
+.output-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 10px;
 }
-.html-output { padding: 8px 0; font-size: 14px; }
+.output-svg { display: block; margin: 0 auto; max-width: 100%; }
+
+/* ── HTML output (pandas tables, etc.) ── */
+.html-output { font-size: 13px; overflow-x: auto; }
+.html-output table { margin: 0; font-size: 13px; }
 </style>
 </head>
 <body>
