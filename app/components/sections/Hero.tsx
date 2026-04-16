@@ -11,17 +11,20 @@ const HeroScene = dynamic(() => import("../3d/HeroScene"), {
 });
 
 /* ── Entrance variants ─────────────────────────────────── */
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+const EASE_IN: [number, number, number, number] = [0.4, 0, 1, 1];
+
 const container = {
   hidden: {},
   show: { transition: { staggerChildren: 0.1, delayChildren: 0.15 } },
 };
 const item = {
   hidden: { opacity: 0, y: 20, filter: "blur(8px)" },
-  show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.75, ease: [0.16, 1, 0.3, 1] } },
+  show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.75, ease: EASE } },
 };
 const itemSlow = {
   hidden: { opacity: 0, y: 14, filter: "blur(6px)" },
-  show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.9, ease: [0.16, 1, 0.3, 1] } },
+  show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.9, ease: EASE } },
 };
 
 /* ── Conversion animation data ─────────────────────────── */
@@ -73,13 +76,13 @@ function FloatingWord({ label, x, y, o, blur, size, delay, amp, dur, hovered }: 
       initial={{ x, y: y + 10, opacity: 0, filter: `blur(${blur + 4}px)` }}
       animate={
         hovered
-          ? { x: 0, y: -8, opacity: 0, filter: "blur(10px)", scale: 0.7, transition: { duration: 0.42, ease: [0.4, 0, 1, 1], delay } }
+          ? { x: 0, y: -8, opacity: 0, filter: "blur(10px)", scale: 0.7, transition: { duration: 0.42, ease: EASE_IN, delay } }
           : reduced
           ? { x, y, opacity: o, filter: `blur(${blur}px)`, scale: 1 }
           : {
               x, y: [y, y - amp, y], opacity: o, filter: `blur(${blur}px)`, scale: 1,
               transition: {
-                x: { duration: 0.55, ease: [0.16, 1, 0.3, 1], delay: delay + 0.1 },
+                x: { duration: 0.55, ease: EASE, delay: delay + 0.1 },
                 y: { duration: dur, repeat: Infinity, ease: "easeInOut", repeatType: "mirror", delay },
                 opacity: { duration: 0.5, delay: delay + 0.1 },
                 filter: { duration: 0.5, delay: delay + 0.1 },

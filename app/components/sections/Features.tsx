@@ -58,6 +58,8 @@ const features = [
   },
 ];
 
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
 const cardVariants = {
   hidden: { opacity: 0, y: 40 },
   show: (i: number) => ({
@@ -65,7 +67,7 @@ const cardVariants = {
     y: 0,
     transition: {
       duration: 0.6,
-      ease: [0.16, 1, 0.3, 1],
+      ease: EASE,
       delay: i * 0.08,
     },
   }),
@@ -77,7 +79,7 @@ const headingVariants = {
     opacity: 1,
     y: 0,
     filter: "blur(0px)",
-    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] },
+    transition: { duration: 0.7, ease: EASE },
   },
 };
 
