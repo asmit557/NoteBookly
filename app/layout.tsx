@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Navbar from "./components/ui/Navbar";
+import SessionProvider from "./components/providers/SessionProvider";
 import "./globals.css";
 
 const inter = Inter({
@@ -29,10 +30,12 @@ export default function RootLayout({
           <div className="absolute -bottom-[10%] left-[25%] h-[450px] w-[450px] rounded-full bg-[radial-gradient(circle,rgba(108,99,255,0.04)_0%,transparent_65%)] blur-3xl" />
         </div>
 
-        <div className="relative z-10 flex flex-col min-h-screen">
-          <Navbar />
-          <main className="flex-1 pt-16">{children}</main>
-        </div>
+        <SessionProvider>
+          <div className="relative z-10 flex flex-col min-h-screen">
+            <Navbar />
+            <main className="flex-1 pt-16">{children}</main>
+          </div>
+        </SessionProvider>
       </body>
     </html>
   );

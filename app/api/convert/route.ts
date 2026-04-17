@@ -5,6 +5,7 @@ import fs from "fs";
 import { marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
+import { auth } from "@/auth";
 
 // Vercel: run as Node.js (not Edge), allow up to 60 s for Chromium
 export const runtime = "nodejs";
@@ -331,6 +332,15 @@ ${parts.join("\n")}
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  // Auth gate — reject unauthenticated requests
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json(
+      { message: "Unauthorized. Please sign in." },
+      { status: 401 }
+    );
+  }
+
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
 
   try {

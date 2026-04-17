@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSession, signIn } from "next-auth/react";
 import dynamic from "next/dynamic";
 import Button from "../ui/Button";
 
@@ -155,6 +156,8 @@ type Status = "idle" | "loading" | "error";
 
 export default function Hero() {
   const reduced = useReducedMotion();
+  const { data: session } = useSession();
+  const authed = !!session?.user;
   const [hovered, setHovered] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
@@ -219,7 +222,7 @@ export default function Hero() {
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
-    setDragOver(true);
+    if (authed) setDragOver(true);
   }
 
   function handleDragLeave() {
@@ -229,6 +232,7 @@ export default function Hero() {
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOver(false);
+    if (!authed) return;
     const file = e.dataTransfer.files?.[0];
     if (file) handleFile(file);
   }
@@ -317,15 +321,25 @@ export default function Hero() {
 
           {/* CTA */}
           <motion.div variants={reduced ? undefined : itemSlow} className="flex flex-col items-center gap-3 pt-8">
-            {/* <Button
-              size="lg"
-              variant="primary"
-              loading={loading}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {!loading && <UploadIcon />}
-              {loading ? "Converting…" : "Upload Notebook"}
-            </Button> */}
+            {authed ? (
+              <Button
+                size="lg"
+                variant="primary"
+                loading={loading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {!loading && <UploadIcon />}
+                {loading ? "Converting…" : "Upload Notebook"}
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                variant="primary"
+                onClick={() => signIn("google")}
+              >
+                Sign in to Upload
+              </Button>
+            )}
 
             <AnimatePresence mode="wait">
               {error && (
@@ -342,12 +356,18 @@ export default function Hero() {
               )}
             </AnimatePresence>
 
-            <motion.p
-              className="text-[11px] text-[--muted] tracking-wide"
-              animate={{ opacity: dragOver ? 0 : 1 }}
-            >
-              or drag & drop a .ipynb file anywhere
-            </motion.p>
+            {authed ? (
+              <motion.p
+                className="text-[11px] text-[--muted] tracking-wide"
+                animate={{ opacity: dragOver ? 0 : 1 }}
+              >
+                or drag & drop a .ipynb file anywhere
+              </motion.p>
+            ) : (
+              <p className="text-[11px] text-[--muted] tracking-wide">
+                Sign in with Google to start converting notebooks
+              </p>
+            )}
           </motion.div>
         </motion.div>
       </div>
