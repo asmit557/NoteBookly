@@ -34,23 +34,22 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const isPrimary = variant === "primary";
 
     return (
-      <motion.button
+      <button
         ref={ref}
-        whileHover={reduced ? undefined : { scale: 1.02 }}
-        whileTap={reduced ? undefined : { scale: 0.97 }}
-        transition={{ duration: 0.15, ease: "easeOut" }}
+        type="button"
         disabled={disabled || loading}
-        onHoverStart={() => setHovered(true)}
-        onHoverEnd={() => setHovered(false)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         className={[
           "relative inline-flex items-center justify-center rounded-lg font-medium overflow-hidden",
           "transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[--accent] focus-visible:ring-offset-2 focus-visible:ring-offset-[--background]",
           "disabled:pointer-events-none disabled:opacity-40 cursor-pointer select-none",
+          "hover:scale-[1.02] active:scale-[0.97]",
           base[variant],
           sizes[size],
           className,
         ].join(" ")}
-        {...(props as ComponentPropsWithoutRef<typeof motion.button>)}
+        {...props}
       >
         {/* Shimmer — primary only */}
         {isPrimary && !reduced && (
@@ -72,7 +71,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         <span className={loading ? "invisible" : "relative flex items-center gap-[inherit]"}>
           {children}
         </span>
-      </motion.button>
+      </button>
     );
   }
 );
