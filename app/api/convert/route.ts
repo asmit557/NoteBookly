@@ -26,7 +26,9 @@ marked.use(
 // highlight.js github theme — inlined so no fs.readFileSync is needed at
 // runtime (Next.js bundles API routes with webpack; node_modules is not on
 // disk in Vercel's serverless environment at process.cwd()).
-const HLJS_CSS = `pre code.hljs{display:block;overflow-x:auto;padding:1em}code.hljs{padding:3px 5px}.hljs{color:#24292e;background:#fff}.hljs-doctag,.hljs-keyword,.hljs-meta .hljs-keyword,.hljs-template-tag,.hljs-template-variable,.hljs-type,.hljs-variable.language_{color:#d73a49}.hljs-title,.hljs-title.class_,.hljs-title.class_.inherited__,.hljs-title.function_{color:#6f42c1}.hljs-attr,.hljs-attribute,.hljs-literal,.hljs-meta,.hljs-number,.hljs-operator,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-id,.hljs-variable{color:#005cc5}.hljs-meta .hljs-string,.hljs-regexp,.hljs-string{color:#032f62}.hljs-built_in,.hljs-symbol{color:#e36209}.hljs-code,.hljs-comment,.hljs-formula{color:#6a737d}.hljs-name,.hljs-quote,.hljs-selector-pseudo,.hljs-selector-tag{color:#22863a}.hljs-subst{color:#24292e}.hljs-section{color:#005cc5;font-weight:700}.hljs-bullet{color:#735c0f}.hljs-emphasis{color:#24292e;font-style:italic}.hljs-strong{color:#24292e;font-weight:700}.hljs-addition{color:#22863a;background-color:#f0fff4}.hljs-deletion{color:#b31d28;background-color:#ffeef0}`;
+const HLJS_CSS_LIGHT = `pre code.hljs{display:block;overflow-x:auto;padding:1em}code.hljs{padding:3px 5px}.hljs{color:#24292e;background:#fff}.hljs-doctag,.hljs-keyword,.hljs-meta .hljs-keyword,.hljs-template-tag,.hljs-template-variable,.hljs-type,.hljs-variable.language_{color:#d73a49}.hljs-title,.hljs-title.class_,.hljs-title.class_.inherited__,.hljs-title.function_{color:#6f42c1}.hljs-attr,.hljs-attribute,.hljs-literal,.hljs-meta,.hljs-number,.hljs-operator,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-id,.hljs-variable{color:#005cc5}.hljs-meta .hljs-string,.hljs-regexp,.hljs-string{color:#032f62}.hljs-built_in,.hljs-symbol{color:#e36209}.hljs-code,.hljs-comment,.hljs-formula{color:#6a737d}.hljs-name,.hljs-quote,.hljs-selector-pseudo,.hljs-selector-tag{color:#22863a}.hljs-subst{color:#24292e}.hljs-section{color:#005cc5;font-weight:700}.hljs-bullet{color:#735c0f}.hljs-emphasis{color:#24292e;font-style:italic}.hljs-strong{color:#24292e;font-weight:700}.hljs-addition{color:#22863a;background-color:#f0fff4}.hljs-deletion{color:#b31d28;background-color:#ffeef0}`;
+
+const HLJS_CSS_DARK = `pre code.hljs{display:block;overflow-x:auto;padding:1em}code.hljs{padding:3px 5px}.hljs{color:#c9d1d9;background:#0d1117}.hljs-doctag,.hljs-keyword,.hljs-meta .hljs-keyword,.hljs-template-tag,.hljs-template-variable,.hljs-type,.hljs-variable.language_{color:#ff7b72}.hljs-title,.hljs-title.class_,.hljs-title.class_.inherited__,.hljs-title.function_{color:#d2a8ff}.hljs-attr,.hljs-attribute,.hljs-literal,.hljs-meta,.hljs-number,.hljs-operator,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-id,.hljs-variable{color:#79c0ff}.hljs-meta .hljs-string,.hljs-regexp,.hljs-string{color:#a5d6ff}.hljs-built_in,.hljs-symbol{color:#ffa657}.hljs-code,.hljs-comment,.hljs-formula{color:#8b949e}.hljs-name,.hljs-quote,.hljs-selector-pseudo,.hljs-selector-tag{color:#7ee787}.hljs-subst{color:#c9d1d9}.hljs-section{color:#79c0ff;font-weight:700}.hljs-bullet{color:#f2cc60}.hljs-emphasis{color:#c9d1d9;font-style:italic}.hljs-strong{color:#c9d1d9;font-weight:700}.hljs-addition{color:#aff5b4;background-color:#033a16}.hljs-deletion{color:#ffdcd7;background-color:#67060c}`;
 
 // ── Chromium resolution ───────────────────────────────────────────────────────
 // @sparticuz/chromium ships a Linux binary for Lambda/Vercel.
@@ -149,7 +151,8 @@ function renderOutput(output: NotebookOutput): string {
   return "";
 }
 
-function generateHTML(notebook: Notebook): string {
+function generateHTML(notebook: Notebook, theme: string = "light"): string {
+  const isDark = theme === "dark";
   const parts: string[] = [];
 
   for (const cell of notebook.cells) {
@@ -177,7 +180,7 @@ function generateHTML(notebook: Notebook): string {
 <meta charset="utf-8" />
 <style>
 /* ── highlight.js theme ── */
-${HLJS_CSS}
+${isDark ? HLJS_CSS_DARK : HLJS_CSS_LIGHT}
 
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -321,6 +324,33 @@ hr { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
 /* ── HTML output (pandas tables, etc.) ── */
 .html-output { font-size: 13px; overflow-x: auto; }
 .html-output table { margin: 0; font-size: 13px; }
+
+${isDark ? `
+/* ── Dark theme overrides ── */
+body { background: #020617; color: #e2e8f0; }
+h1, h2, h3, h4, h5, h6 { color: #f1f5f9; }
+h1 { border-bottom-color: #1e293b; }
+a { color: #818cf8; }
+:not(pre) > code { background: #1e293b; border-color: #334155; color: #a78bfa; }
+pre { background: #0f172a; }
+pre code { color: #e2e8f0; }
+blockquote { background: #0f172a; border-left-color: #818cf8; color: #94a3b8; }
+table th, table td { border-color: #1e293b; }
+th { background: #0f172a; }
+tr:nth-child(even) td { background: #0f172a; }
+hr { border-top-color: #1e293b; }
+.cell.raw pre { background: #0f172a; border-color: #1e293b; color: #94a3b8; }
+.output-block { background: #0f172a; border-left-color: #818cf8; }
+.output-block.stream { border-left-color: #60a5fa; background: #0c1929; }
+.output-block.error { border-left-color: #f87171; background: #1c0a0a; }
+.output-block.image { background: #0f172a; border-color: #1e293b; border-left-color: #a78bfa; }
+.output-block pre.output { color: #cbd5e1; }
+.output-block.error pre.output { color: #fca5a5; }
+.html-output table { color: #e2e8f0; }
+.html-output th { background: #0f172a; color: #f1f5f9; }
+.html-output td { border-color: #1e293b; }
+.html-output tr:nth-child(even) td { background: #0f172a; }
+` : ''}
 </style>
 </head>
 <body>
@@ -384,7 +414,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const html = generateHTML(notebook);
+    const theme = (formData.get("theme") as string) || "light";
+    const html = generateHTML(notebook, theme);
 
     browser = await puppeteer.launch(await getBrowserOptions());
     const page = await browser.newPage();

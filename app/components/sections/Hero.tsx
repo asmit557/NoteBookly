@@ -3,6 +3,7 @@
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession, signIn } from "next-auth/react";
+import { usePdfTheme } from "../providers/ThemeProvider";
 import dynamic from "next/dynamic";
 import Button from "../ui/Button";
 
@@ -157,6 +158,7 @@ type Status = "idle" | "loading" | "error";
 export default function Hero() {
   const reduced = useReducedMotion();
   const { data: session } = useSession();
+  const { pdfTheme } = usePdfTheme();
   const authed = !!session?.user;
   const [hovered, setHovered] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -190,6 +192,7 @@ export default function Hero() {
     try {
       const form = new FormData();
       form.append("file", file);
+      form.append("theme", pdfTheme);
 
       const res = await fetch("/api/convert", { method: "POST", body: form });
 
@@ -212,7 +215,7 @@ export default function Hero() {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setStatus("error");
     }
-  }, []);
+  }, [pdfTheme]);
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

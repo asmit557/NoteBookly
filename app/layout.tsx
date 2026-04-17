@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Navbar from "./components/ui/Navbar";
 import SessionProvider from "./components/providers/SessionProvider";
+import ThemeProvider from "./components/providers/ThemeProvider";
 import "./globals.css";
 
 const inter = Inter({
@@ -31,10 +32,12 @@ export default function RootLayout({
         </div>
 
         <SessionProvider>
-          <div className="relative z-10 flex flex-col min-h-screen">
-            <Navbar />
-            <main className="flex-1 pt-16">{children}</main>
-          </div>
+          <ThemeProvider>
+            <div className="relative z-10 flex flex-col min-h-screen">
+              <Navbar />
+              <main className="flex-1 pt-16">{children}</main>
+            </div>
+          </ThemeProvider>
         </SessionProvider>
       </body>
     </html>
