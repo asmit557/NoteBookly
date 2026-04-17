@@ -322,7 +322,8 @@ export default function Hero() {
           {/* CTA */}
           <motion.div variants={reduced ? undefined : itemSlow} className="flex flex-col items-center gap-3 pt-8">
             {authed ? (
-              <Button
+              <Button 
+              className="z-50"
                 size="lg"
                 variant="primary"
                 loading={loading}
@@ -333,6 +334,7 @@ export default function Hero() {
               </Button>
             ) : (
               <Button
+                className="z-50"
                 size="lg"
                 variant="primary"
                 onClick={() => signIn("google")}
