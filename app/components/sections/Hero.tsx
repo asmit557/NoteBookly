@@ -3,7 +3,6 @@
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession, signIn } from "next-auth/react";
-import { usePdfTheme } from "../providers/ThemeProvider";
 import dynamic from "next/dynamic";
 import Button from "../ui/Button";
 
@@ -158,7 +157,6 @@ type Status = "idle" | "loading" | "error";
 export default function Hero() {
   const reduced = useReducedMotion();
   const { data: session } = useSession();
-  const { pdfTheme } = usePdfTheme();
   const authed = !!session?.user;
   const [hovered, setHovered] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -192,7 +190,6 @@ export default function Hero() {
     try {
       const form = new FormData();
       form.append("file", file);
-      form.append("theme", pdfTheme);
 
       const res = await fetch("/api/convert", { method: "POST", body: form });
 
@@ -215,7 +212,7 @@ export default function Hero() {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setStatus("error");
     }
-  }, [pdfTheme]);
+  }, []);
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -379,7 +376,7 @@ export default function Hero() {
 
       {/* ── Conversion animation ── */}
       <div
-        className="absolute left-1/2 top-[90%] -translate-x-1/2 -translate-y-1/2 z-10 w-full max-w-xl"
+        className="absolute left-1/2 top-[90%] -translate-x-1/2 -translate-y-1/2 z-10 w-full max-w-xl pointer-events-none"
         onMouseEnter={handleEnter}
         onMouseLeave={() => setHovered(false)}
       >
@@ -399,6 +396,7 @@ export default function Hero() {
                 animate={{ opacity: 0.6 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
+
               >
                 → converting
               </motion.span>

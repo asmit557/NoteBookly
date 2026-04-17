@@ -1,0 +1,31 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  name        String?
+  image       String?
+  createdAt   DateTime     @default(now())
+  conversions Conversion[]
+}
+
+model Conversion {
+  id        String   @id @default(cuid())
+  fileName  String
+  pdfUrl    String
+  publicId  String
+  theme     String
+  size      Int
+  status    String   @default("success")
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

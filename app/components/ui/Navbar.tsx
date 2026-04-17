@@ -63,12 +63,16 @@ export default function Navbar() {
 
           {status === "authenticated" && session.user && (
             <>
-              <div className="flex items-center gap-2">
+              <a
+                href="/dashboard"
+                className="flex items-center gap-2 group"
+                title="Dashboard"
+              >
                 {session.user.image ? (
                   <img
                     src={session.user.image}
                     alt=""
-                    className="h-7 w-7 rounded-full ring-1 ring-[--border]"
+                    className="h-7 w-7 rounded-full ring-1 ring-[--border] group-hover:ring-[--accent] transition-all"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
@@ -76,10 +80,10 @@ export default function Navbar() {
                     {session.user.name?.charAt(0) ?? "?"}
                   </div>
                 )}
-                <span className="hidden sm:block text-sm text-[--muted-light] max-w-[120px] truncate">
+                <span className="hidden sm:block text-sm text-[--muted-light] group-hover:text-[--foreground] max-w-[120px] truncate transition-colors">
                   {session.user.name}
                 </span>
-              </div>
+              </a>
               <Button
                 variant="ghost"
                 size="sm"

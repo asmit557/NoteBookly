@@ -6,6 +6,8 @@ import { marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { uploadPdf } from "@/lib/cloudinary";
 
 // Vercel: run as Node.js (not Edge), allow up to 60 s for Chromium
 export const runtime = "nodejs";
@@ -429,6 +431,42 @@ export async function POST(request: NextRequest) {
 
     const pdf = Buffer.from(pdfUint8);
     const downloadName = file.name.replace(/\.ipynb$/, ".pdf");
+
+    // ── Persist to Cloudinary + DB (best-effort, don't fail conversion) ──────
+    try {
+      const userEmail = session.user.email!;
+
+      const [cloudResult, dbUser] = await Promise.all([
+        uploadPdf(pdf, downloadName, userEmail),
+        prisma.user.upsert({
+          where: { email: userEmail },
+          update: {
+            name: session.user.name ?? undefined,
+            image: session.user.image ?? undefined,
+          },
+          create: {
+            email: userEmail,
+            name: session.user.name ?? undefined,
+            image: session.user.image ?? undefined,
+          },
+        }),
+      ]);
+
+      await prisma.conversion.create({
+        data: {
+          fileName: downloadName,
+          pdfUrl: cloudResult.url,
+          publicId: cloudResult.publicId,
+          theme,
+          size: pdf.byteLength,
+          status: "success",
+          userId: dbUser.id,
+        },
+      });
+    } catch (storageErr) {
+      // Log but never fail the user's download because of a storage error
+      console.error("[convert] storage error (non-fatal):", storageErr);
+    }
 
     return new NextResponse(pdf, {
       status: 200,
