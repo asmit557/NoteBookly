@@ -1,6 +1,6 @@
 "use client";
 
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { useRef, useMemo } from "react";
 import * as THREE from "three";
 
@@ -45,19 +45,15 @@ function Particles({ count = 900 }: { count?: number }) {
 function FloatingGeo() {
   const meshRef = useRef<THREE.Mesh>(null);
   const groupRef = useRef<THREE.Group>(null);
-  const { mouse } = useThree();
 
   useFrame(({ clock }) => {
     if (!meshRef.current || !groupRef.current) return;
     const t = clock.elapsedTime;
-    // Slow self-rotation
     meshRef.current.rotation.x = t * 0.12;
     meshRef.current.rotation.y = t * 0.18;
-    // Float
     groupRef.current.position.y = Math.sin(t * 0.55) * 0.18;
-    // Mouse parallax (damped)
-    groupRef.current.rotation.x += (mouse.y * 0.3 - groupRef.current.rotation.x) * 0.04;
-    groupRef.current.rotation.y += (mouse.x * 0.3 - groupRef.current.rotation.y) * 0.04;
+    groupRef.current.rotation.x = Math.sin(t * 0.3) * 0.15;
+    groupRef.current.rotation.y = Math.cos(t * 0.25) * 0.15;
   });
 
   return (
@@ -103,7 +99,8 @@ export default function HeroScene() {
       camera={{ fov: 55, near: 0.1, far: 100, position: [0, 0, 6] }}
       dpr={[1, 1.5]}
       gl={{ antialias: false, alpha: true }}
-      style={{ position: "absolute", inset: 0 }}
+      style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+      events={() => ({ enabled: false, priority: 0, compute: () => {} } as never)}
     >
       <Particles />
       <FloatingGeo />
