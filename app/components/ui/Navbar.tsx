@@ -31,19 +31,25 @@ export default function Navbar() {
       />
 
       <nav className="container relative flex h-full items-center justify-between gap-8">
-        {/* Logo */}
-        <a href="/" className="flex items-center gap-2 shrink-0 group">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[--accent] shadow-[0_0_14px_rgba(108,99,255,0.5)]">
+        {/* Left: home icon + dashboard button */}
+        <div className="flex items-center gap-3 shrink-0">
+          <a href="/" className="flex h-7 w-7 items-center justify-center rounded-lg bg-[--accent] shadow-[0_0_14px_rgba(108,99,255,0.5)] hover:opacity-90 transition-opacity shrink-0">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
               <path d="M2 11 7 3l5 8H2Z" fill="white" fillOpacity="0.9" />
             </svg>
-          </span>
-          <span className="text-sm font-semibold tracking-tight text-[--foreground] group-hover:text-white transition-colors">
-            LOGO
-          </span>
-        </a>
+          </a>
 
-        {/* Theme + Auth actions */}
+          {status === "authenticated" && (
+            <a
+              href="/dashboard"
+              className="flex items-center gap-1.5 h-8 rounded-lg px-3 text-xs font-semibold text-[--foreground] bg-[--surface] hover:bg-[--surface-hover] border border-[--border] hover:border-[--accent]/40 transition-all"
+            >
+              Dashboard
+            </a>
+          )}
+        </div>
+
+        {/* Right: theme + auth actions */}
         <div className="flex items-center gap-3 shrink-0">
           <ThemeToggle />
           {status === "loading" && (
@@ -63,27 +69,18 @@ export default function Navbar() {
 
           {status === "authenticated" && session.user && (
             <>
-              <a
-                href="/dashboard"
-                className="flex items-center gap-2 group"
-                title="Dashboard"
-              >
-                {session.user.image ? (
-                  <img
-                    src={session.user.image}
-                    alt=""
-                    className="h-7 w-7 rounded-full ring-1 ring-[--border] group-hover:ring-[--accent] transition-all"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[--accent] text-xs font-medium text-white">
-                    {session.user.name?.charAt(0) ?? "?"}
-                  </div>
-                )}
-                <span className="hidden sm:block text-sm text-[--muted-light] group-hover:text-[--foreground] max-w-[120px] truncate transition-colors">
-                  {session.user.name}
-                </span>
-              </a>
+              {session.user.image ? (
+                <img
+                  src={session.user.image}
+                  alt=""
+                  className="h-7 w-7 rounded-full ring-1 ring-[--border]"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[--accent] text-xs font-medium text-white">
+                  {session.user.name?.charAt(0) ?? "?"}
+                </div>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
