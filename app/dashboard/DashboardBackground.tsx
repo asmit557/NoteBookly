@@ -147,7 +147,7 @@ export default function DashboardBackground() {
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 85% 70% at 50% 40%, transparent 10%, rgba(8,8,16,0.55) 70%, rgba(8,8,16,0.85) 100%)",
+            "radial-gradient(ellipse 85% 70% at 50% 40%, transparent 10%, rgba(8,8,16,0.25) 70%, rgba(8,8,16,0.45) 100%)",
         }}
       />
     </div>

@@ -3,7 +3,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useRef, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { signOut } from "next-auth/react";
 import { usePdfTheme } from "@/app/components/providers/ThemeProvider";
 import Button from "@/app/components/ui/Button";
 
@@ -161,19 +160,6 @@ const IconNotebook = () => (
   </svg>
 );
 
-const IconArrowLeft = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M19 12H5M12 19l-7-7 7-7"/>
-  </svg>
-);
-
-const IconLogOut = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-    <polyline points="16,17 21,12 16,7"/>
-    <line x1="21" y1="12" x2="9" y2="12"/>
-  </svg>
-);
 
 // ── Badges ────────────────────────────────────────────────────────────────────
 
@@ -262,7 +248,7 @@ function StatCard({
       className={`relative overflow-hidden rounded-2xl border p-5 flex flex-col gap-3 h-full ${
         accent
           ? "bg-[--accent-muted] border-[--accent]/30"
-          : "bg-[--surface]/80 border-[--border] backdrop-blur-sm"
+          : "bg-[--surface]/55 border-[--border] backdrop-blur-sm"
       }`}
     >
       {/* Subtle top glow line for accent card */}
@@ -315,7 +301,7 @@ function ConversionCard({
       exit={{ opacity: 0, scale: 0.92, filter: "blur(8px)" }}
       transition={{ duration: 0.28, ease: EASE }}
       whileHover={{ y: -3, transition: { duration: 0.16 } }}
-      className="group relative rounded-2xl border border-[--border] bg-[--surface]/80 backdrop-blur-sm p-4 flex flex-col gap-3 hover:border-[--accent]/30 transition-colors overflow-hidden"
+      className="group relative rounded-2xl border border-[--border] bg-[--surface]/55 backdrop-blur-sm p-4 flex flex-col gap-3 hover:border-[--accent]/30 transition-colors overflow-hidden"
     >
       {/* Hover glow line */}
       <div
@@ -391,7 +377,7 @@ function QuickUpload({
     <motion.div
       {...fadeUp(0.22)}
       onClick={!uploading ? onUpload : undefined}
-      className={`group relative rounded-2xl border bg-[--surface]/80 backdrop-blur-sm overflow-hidden transition-all duration-300 ${
+      className={`group relative rounded-2xl border bg-[--surface]/55 backdrop-blur-sm overflow-hidden transition-all duration-300 ${
         uploading
           ? "border-[--accent]/40 cursor-default"
           : "border-dashed border-[--border-strong] hover:border-[--accent]/50 cursor-pointer"
@@ -524,7 +510,7 @@ function PreviewPanel({ last }: { last: ConversionRecord | null }) {
   return (
     <motion.div
       {...fadeRight(0.18)}
-      className="rounded-2xl border border-[--border] bg-[--surface]/80 backdrop-blur-sm overflow-hidden"
+      className="rounded-2xl border border-[--border] bg-[--surface]/55 backdrop-blur-sm overflow-hidden"
     >
       <div className="flex items-center justify-between px-4 py-3.5 border-b border-[--border]">
         <span className="text-xs font-bold tracking-wider uppercase text-[--muted-light]">
@@ -590,7 +576,7 @@ function ActivityTimeline({ items }: { items: ConversionRecord[] }) {
   return (
     <motion.div
       {...fadeRight(0.28)}
-      className="rounded-2xl border border-[--border] bg-[--surface]/80 backdrop-blur-sm overflow-hidden"
+      className="rounded-2xl border border-[--border] bg-[--surface]/55 backdrop-blur-sm overflow-hidden"
     >
       <div className="px-4 py-3.5 border-b border-[--border]">
         <span className="text-xs font-bold tracking-wider uppercase text-[--muted-light]">
@@ -668,7 +654,7 @@ export default function DashboardClient({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { pdfTheme, togglePdfTheme } = usePdfTheme();
+  const { pdfTheme } = usePdfTheme();
 
   // ── Upload handler ──────────────────────────────────────────────────────────
   const handleFile = useCallback(
@@ -802,58 +788,20 @@ export default function DashboardClient({
           {/* ── Page header ── */}
           <motion.div
             {...fadeUp(0)}
-            className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+            className="mb-8"
           >
-            {/* Greeting */}
-            <div>
-              {/* Use div, not h1, to avoid globals.css h1 font-size override */}
-              <div className="text-[1.75rem] font-bold tracking-tight leading-tight text-[--foreground]">
-                {greeting},{" "}
-                <span className="gradient-accent">{firstName}</span>
-              </div>
-              <p className="text-sm text-[--muted-light] mt-1.5">
-                {new Date().toLocaleDateString("en-US", {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </p>
+            {/* Use div, not h1, to avoid globals.css h1 font-size override */}
+            <div className="text-[1.75rem] font-bold tracking-tight leading-tight text-[--foreground]">
+              {greeting},{" "}
+              <span className="gradient-accent">{firstName}</span>
             </div>
-
-            {/* Controls */}
-            <div className="flex items-center gap-2 shrink-0">
-              {/* PDF theme toggle */}
-              <button
-                type="button"
-                onClick={togglePdfTheme}
-                title={`Switch PDF theme (current: ${pdfTheme})`}
-                className="flex items-center gap-2 h-8 rounded-lg px-3 text-xs font-medium text-[--muted-light] hover:text-[--foreground] hover:bg-[--surface] border border-[--border] transition-all cursor-pointer select-none backdrop-blur-sm"
-              >
-                {pdfTheme === "dark" ? <IconMoon /> : <IconSun />}
-                <span className="hidden sm:inline">
-                  {pdfTheme === "dark" ? "Dark" : "Light"} PDF
-                </span>
-              </button>
-
-              {/* Sign out */}
-              <button
-                type="button"
-                onClick={() => signOut({ callbackUrl: "/" })}
-                className="flex items-center gap-2 h-8 rounded-lg px-3 text-xs font-medium text-[--muted-light] hover:text-[--foreground] hover:bg-[--surface] border border-[--border] transition-all cursor-pointer backdrop-blur-sm"
-              >
-                <IconLogOut />
-                <span className="hidden sm:inline">Sign out</span>
-              </button>
-
-              {/* Home */}
-              <a
-                href="/"
-                className="flex items-center gap-2 h-8 rounded-lg px-3 text-xs font-medium text-[--muted-light] hover:text-[--foreground] hover:bg-[--surface] border border-[--border] transition-all backdrop-blur-sm"
-              >
-                <IconArrowLeft />
-                <span className="hidden sm:inline">Home</span>
-              </a>
-            </div>
+            <p className="text-sm text-[--muted-light] mt-1.5">
+              {new Date().toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </p>
           </motion.div>
 
           {/* ── Stats row (4 equal cols) ── */}

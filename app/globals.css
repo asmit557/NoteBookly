@@ -33,9 +33,10 @@
 *,
 *::before,
 *::after {
+  /* box-sizing only — do NOT add margin/padding resets here.
+     Tailwind utilities live inside @layer so any unlayered bare-*
+     rule wins the cascade and wipes every p-* / m-* utility class. */
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
 html {
