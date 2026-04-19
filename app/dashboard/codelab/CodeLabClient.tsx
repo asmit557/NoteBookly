@@ -19,7 +19,6 @@ interface CodeLabClientProps {
   user: UserInfo;
 }
 
-// Shapes returned by the backend session endpoints
 interface SessionResponse {
   id: string;
   name: string;
@@ -32,7 +31,6 @@ interface SessionResponse {
 
 const AUTOSAVE_DELAY_MS = 1_000;
 
-// Fallback used only while the real session is loading
 const LOADING_FILE: CodeFile = {
   id: "__loading__",
   name: "main.py",
@@ -95,7 +93,6 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
       try {
         const headers = { "x-user-id": user.id };
 
-        // 1. Try to load the most recent existing session
         const listRes = await fetch(`${BACKEND_URL}/api/codelab/session`, { headers });
         if (listRes.ok) {
           const sessions = (await listRes.json()) as SessionResponse[];
@@ -107,15 +104,11 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
             );
             if (detailRes.ok) {
               const s = (await detailRes.json()) as SessionResponse;
-              if (!cancelled) {
-                applySession(s);
-                return;
-              }
+              if (!cancelled) { applySession(s); return; }
             }
           }
         }
 
-        // 2. No sessions yet — create one
         const createRes = await fetch(`${BACKEND_URL}/api/codelab/session/create`, {
           method: "POST",
           headers: { ...headers, "Content-Type": "application/json" },
@@ -126,7 +119,6 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
         } else if (!cancelled) {
           setSessionStatus("error");
           setSessionName("Offline");
-          // Keep the editor usable — user can type but save/run will no-op
           setFiles([{ id: "offline-1", name: "main.py", content: "# Start coding here\nprint('Hello!')\n" }]);
           setActiveFileId("offline-1");
         }
@@ -149,7 +141,6 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
       setFiles(sessionFiles);
       setActiveFileId(sessionFiles[0].id);
       if (s.outputs && s.outputs.length > 0) {
-        // Show up to 50 most recent past outputs, oldest first
         setOutputs(
           [...s.outputs]
             .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
@@ -221,7 +212,6 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
   const handleRun = useCallback(async () => {
     if (!sessionId || !activeFile || isRunning) return;
 
-    // Flush pending auto-save so the backend always has the latest code
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
@@ -230,14 +220,12 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
     setIsRunning(true);
 
     try {
-      // 1. Ensure latest content is persisted before executing
       await fetch(`${BACKEND_URL}/api/codelab/session/${sessionId}/save`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-user-id": user.id },
         body: JSON.stringify({ fileId: activeFile.id, content: activeFile.content }),
       });
 
-      // 2. Execute
       const res = await fetch(
         `${BACKEND_URL}/api/codelab/session/${sessionId}/run`,
         {
@@ -251,7 +239,6 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
         throw new Error("Execution service unavailable. Check backend logs.");
       }
 
-      // 408 = timed out, but body still contains the CodeOutput record
       const output = (await res.json()) as CodeOutputRecord;
       setOutputs((prev) => [...prev, output]);
     } catch (err) {
@@ -265,7 +252,6 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
   }, [sessionId, activeFile, isRunning, user.id]);
 
   // ── New file ──────────────────────────────────────────────────────────────
-  // (full API wiring deferred — add file to local state for now)
 
   const handleNewFile = useCallback(async () => {
     if (!sessionId) return;
@@ -285,7 +271,6 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
         setActiveFileId(newFile.id);
       }
     } catch {
-      // Optimistic local fallback when backend is offline
       const newFile: CodeFile = { id: `local-${Date.now()}`, name, content: `# ${name}\n` };
       setFiles((prev) => [...prev, newFile]);
       setActiveFileId(newFile.id);
@@ -297,98 +282,133 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
   const handleClearOutput = useCallback(() => setOutputs([]), []);
   const firstName = user.name?.split(" ")[0] ?? "there";
 
-  // ── Footer indicators ─────────────────────────────────────────────────────
-
   const footerDot =
     sessionStatus === "ready"  ? "bg-emerald-400" :
     sessionStatus === "error"  ? "bg-red-400"     : "bg-yellow-400 animate-pulse";
 
   const footerLabel =
     sessionStatus === "ready"  ? "Backend connected" :
-    sessionStatus === "error"  ? "Backend offline" : "Connecting…";
+    sessionStatus === "error"  ? "Backend offline"   : "Connecting…";
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 4rem)" }}>
+    <div className="relative flex flex-col" style={{ height: "calc(100vh - 4rem)" }}>
 
-      {/* ── Page header ─────────────────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="flex items-center justify-between px-4 py-3 border-b border-[--border] bg-[--surface]/60 backdrop-blur-sm shrink-0"
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[--accent-muted] text-[--accent]">
-            <IconLab />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-[--foreground] leading-tight">
-              Code Lab
-            </p>
-            <p className="text-[11px] text-[--muted]">
-              {sessionName} · Python 3.10
-            </p>
-          </div>
-        </div>
+      {/* ── 3D Animated Background ──────────────────────────────────────────── */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        {/* Orbs */}
+        <div className="absolute -top-[20%] left-[5%] h-[700px] w-[700px] rounded-full bg-[radial-gradient(circle,rgba(108,99,255,0.12)_0%,transparent_65%)] blur-3xl animate-pulse" />
+        <div className="absolute top-[50%] -right-[5%] h-[500px] w-[500px] rounded-full bg-[radial-gradient(circle,rgba(167,139,250,0.08)_0%,transparent_65%)] blur-3xl animate-pulse [animation-delay:1s]" />
+        <div className="absolute -bottom-[10%] left-[25%] h-[450px] w-[450px] rounded-full bg-[radial-gradient(circle,rgba(108,99,255,0.07)_0%,transparent_65%)] blur-3xl animate-pulse [animation-delay:2s]" />
 
-        <button
-          type="button"
-          onClick={handleRun}
-          disabled={isRunning || !activeFile || sessionStatus !== "ready"}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-[--accent] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity cursor-pointer"
+        {/* 3D Perspective Grid */}
+        <div
+          className="absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage: `
+              linear-gradient(rgba(108,99,255,0.6) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(108,99,255,0.6) 1px, transparent 1px)
+            `,
+            backgroundSize: "60px 60px",
+            transform: "perspective(500px) rotateX(20deg)",
+            transformOrigin: "top center",
+            maskImage: "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.8) 30%, rgba(0,0,0,0.8) 70%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.8) 30%, rgba(0,0,0,0.8) 70%, transparent 100%)",
+          }}
+        />
+
+        {/* Floating dot pattern */}
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: "radial-gradient(circle, rgba(108,99,255,1) 1px, transparent 1px)",
+            backgroundSize: "32px 32px",
+          }}
+        />
+      </div>
+
+      {/* ── Content (z-10 so it sits above background) ───────────────────────── */}
+      <div className="relative z-10 flex flex-col flex-1 overflow-hidden">
+
+        {/* ── Page header ───────────────────────────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] bg-[--surface]/70 backdrop-blur-md shrink-0"
         >
-          {isRunning ? <IconSpinner /> : <IconPlay />}
-          {isRunning ? "Running…" : "Run"}
-        </button>
-      </motion.div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[--accent-muted] text-[--accent]">
+              <IconLab />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[--foreground] leading-tight">
+                Code Lab
+              </p>
+              <p className="text-[11px] text-[--muted]">
+                {sessionName} · Python 3.10
+              </p>
+            </div>
+          </div>
 
-      {/* ── IDE body ─────────────────────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-        className="flex flex-1 overflow-hidden"
-      >
-        <div className="w-48 shrink-0">
-          <FileExplorer
-            files={files.filter((f) => f.id !== LOADING_FILE.id)}
-            activeFileId={activeFileId}
-            onSelectFile={handleSelectFile}
-            onNewFile={handleNewFile}
-          />
-        </div>
+          <button
+            type="button"
+            onClick={handleRun}
+            disabled={isRunning || !activeFile || sessionStatus !== "ready"}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-[--accent] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity cursor-pointer"
+          >
+            {isRunning ? <IconSpinner /> : <IconPlay />}
+            {isRunning ? "Running…" : "Run"}
+          </button>
+        </motion.div>
 
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex-1 overflow-hidden">
-            <Editor
-              file={sessionStatus === "loading" ? LOADING_FILE : activeFile}
-              saveStatus={saveStatus}
-              onChange={handleContentChange}
+        {/* ── IDE body ──────────────────────────────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="flex flex-1 overflow-hidden"
+        >
+          <div className="w-56 shrink-0">
+            <FileExplorer
+              files={files.filter((f) => f.id !== LOADING_FILE.id)}
+              activeFileId={activeFileId}
+              onSelectFile={handleSelectFile}
+              onNewFile={handleNewFile}
             />
           </div>
 
-          <div className="h-52 shrink-0">
-            <OutputConsole
-              outputs={outputs}
-              isRunning={isRunning}
-              sessionStatus={sessionStatus}
-              onClear={handleClearOutput}
-            />
-          </div>
-        </div>
-      </motion.div>
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden">
+              <Editor
+                file={sessionStatus === "loading" ? LOADING_FILE : activeFile}
+                saveStatus={saveStatus}
+                onChange={handleContentChange}
+              />
+            </div>
 
-      {/* ── Footer status bar ────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-1.5 border-t border-[--border] bg-[--background]/80 text-[10px] text-[--muted] shrink-0">
-        <span>{firstName}&apos;s session</span>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5">
-            <span className={`h-1.5 w-1.5 rounded-full ${footerDot}`} />
-            {footerLabel}
-          </span>
-          {sessionId && (
-            <span className="font-mono opacity-50">{sessionId.slice(0, 8)}</span>
-          )}
+            <div className="h-52 shrink-0">
+              <OutputConsole
+                outputs={outputs}
+                isRunning={isRunning}
+                sessionStatus={sessionStatus}
+                onClear={handleClearOutput}
+              />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ── Footer status bar ─────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-5 py-2 border-t border-white/[0.06] bg-[--background]/90 text-[10px] text-[--muted] shrink-0">
+          <span>{firstName}&apos;s session</span>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1.5">
+              <span className={`h-1.5 w-1.5 rounded-full ${footerDot}`} />
+              {footerLabel}
+            </span>
+            {sessionId && (
+              <span className="font-mono opacity-50">{sessionId.slice(0, 8)}</span>
+            )}
+          </div>
         </div>
       </div>
     </div>

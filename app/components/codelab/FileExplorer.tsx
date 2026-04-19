@@ -49,13 +49,13 @@ export default function FileExplorer({
   onNewFile,
 }: FileExplorerProps) {
   return (
-    <div className="flex flex-col h-full border-r border-[--border] bg-[--surface]/80 backdrop-blur-sm select-none">
+    <div className="flex flex-col h-full border-r border-white/[0.06] bg-[--surface]/60 backdrop-blur-md select-none">
 
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[--border] shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] shrink-0">
         <div className="flex items-center gap-1.5 text-[--muted-light]">
           <IconFolder />
-          <span className="text-[10px] font-bold tracking-widest uppercase text-[--muted]">
+          <span className="text-[10px] font-bold tracking-widest uppercase text-[--muted] select-none">
             Files
           </span>
         </div>
@@ -81,11 +81,12 @@ export default function FileExplorer({
               key={file.id}
               type="button"
               onClick={() => onSelectFile(file.id)}
-              className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-left truncate transition-colors cursor-pointer ${
+              className={`w-full flex items-center gap-2 px-4 py-2.5 rounded-lg mx-2 text-xs text-left truncate transition-colors cursor-pointer ${
                 activeFileId === file.id
-                  ? "bg-[--accent-muted] text-[--accent]"
-                  : "text-[--muted-light] hover:bg-[--surface-hover] hover:text-[--foreground]"
+                  ? "bg-white/[0.08] text-[--accent]"
+                  : "text-[--muted-light] hover:bg-white/[0.05] hover:text-[--foreground]"
               }`}
+              style={{ width: "calc(100% - 1rem)" }}
             >
               <span className="shrink-0 opacity-70">{fileIcon(file.name)}</span>
               <span className="truncate">{file.name}</span>
