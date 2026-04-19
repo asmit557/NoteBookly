@@ -106,6 +106,48 @@ export async function deleteFile(req: Request, res: Response) {
   }
 }
 
+export async function renameFile(req: Request, res: Response) {
+  try {
+    const userId = res.locals.userId as string;
+    const { fileId } = req.params;
+    const { name } = req.body as { name?: string };
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "name is required" });
+    }
+
+    const file = await svc.renameFile(fileId, userId, name.trim());
+    res.json(file);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function deleteFileById(req: Request, res: Response) {
+  try {
+    const userId = res.locals.userId as string;
+    const { fileId } = req.params;
+    await svc.deleteFileById(fileId, userId);
+    res.status(204).send();
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Cannot delete the last file")) {
+      return res.status(409).json({ message: err.message });
+    }
+    handleError(res, err);
+  }
+}
+
+export async function duplicateFile(req: Request, res: Response) {
+  try {
+    const userId = res.locals.userId as string;
+    const { fileId } = req.params;
+    const file = await svc.duplicateFile(fileId, userId);
+    res.status(201).json(file);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 // ── Outputs ───────────────────────────────────────────────────────────────────
 
 export async function getOutputs(req: Request, res: Response) {

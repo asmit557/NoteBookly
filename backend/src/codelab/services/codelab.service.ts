@@ -126,6 +126,53 @@ export async function deleteFile(
   await prisma.codeFile.delete({ where: { id: fileId } });
 }
 
+// ── File-centric services (ownership via session) ─────────────────────────────
+
+/** Resolve a file and verify the owning session belongs to the user. */
+async function assertFileOwnership(fileId: string, userId: string) {
+  const file = await prisma.codeFile.findFirst({
+    where: { id: fileId, session: { userId } },
+    include: { session: { select: { id: true } } },
+  });
+  if (!file) throw new NotFoundError("File not found");
+  return file;
+}
+
+function buildCopyName(name: string): string {
+  const dot = name.lastIndexOf(".");
+  if (dot === -1) return `${name}_copy`;
+  return `${name.slice(0, dot)}_copy${name.slice(dot)}`;
+}
+
+export async function renameFile(fileId: string, userId: string, name: string) {
+  await assertFileOwnership(fileId, userId);
+  return prisma.codeFile.update({
+    where: { id: fileId },
+    data: { name },
+  });
+}
+
+export async function deleteFileById(fileId: string, userId: string) {
+  const file = await assertFileOwnership(fileId, userId);
+  const sessionId = file.session.id;
+
+  const count = await prisma.codeFile.count({ where: { sessionId } });
+  if (count <= 1) throw new Error("Cannot delete the last file in a session");
+
+  await prisma.codeFile.delete({ where: { id: fileId } });
+}
+
+export async function duplicateFile(fileId: string, userId: string) {
+  const file = await assertFileOwnership(fileId, userId);
+  return prisma.codeFile.create({
+    data: {
+      sessionId: file.session.id,
+      name: buildCopyName(file.name),
+      content: file.content,
+    },
+  });
+}
+
 // ── Output services ───────────────────────────────────────────────────────────
 
 export async function getOutputs(sessionId: string, userId: string) {

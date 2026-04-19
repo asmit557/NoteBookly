@@ -10,6 +10,9 @@ import {
   deleteFile,
   runCode,
   getOutputs,
+  renameFile,
+  deleteFileById,
+  duplicateFile,
 } from "../controllers/codelab.controller";
 
 const router = Router();
@@ -39,6 +42,16 @@ router.post("/session/:id/files", createFile);
 
 // DELETE /api/codelab/session/:id/files/:fileId
 router.delete("/session/:id/files/:fileId", deleteFile);
+
+// ── File management (file-centric, no sessionId in URL) ───────────────────────
+// PATCH  /api/codelab/file/:fileId/rename
+router.patch("/file/:fileId/rename", renameFile);
+
+// DELETE /api/codelab/file/:fileId
+router.delete("/file/:fileId", deleteFileById);
+
+// POST   /api/codelab/file/:fileId/duplicate
+router.post("/file/:fileId/duplicate", duplicateFile);
 
 // ── Execution ─────────────────────────────────────────────────────────────────
 // POST /api/codelab/session/:id/run
