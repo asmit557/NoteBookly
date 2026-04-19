@@ -36,6 +36,8 @@ export async function uploadPdf(
         public_id: publicId,
         overwrite: false,
         format: "pdf", // ensures URL ends in .pdf so Cloudinary delivers the original file
+        type: "upload",        // delivery type: publicly accessible (no auth required)
+        access_mode: "public", // override account-level security — allow unauthenticated delivery
       },
       (error, result) => {
         if (error || !result) {
