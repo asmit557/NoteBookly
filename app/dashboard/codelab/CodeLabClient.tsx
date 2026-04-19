@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import FileExplorer, { type CodeFile } from "@/app/components/codelab/FileExplorer";
-import Editor from "@/app/components/codelab/Editor";
+import Editor, { type SaveStatus } from "@/app/components/codelab/Editor";
 import OutputConsole, { type CodeOutputRecord } from "@/app/components/codelab/OutputConsole";
+import { BACKEND_URL } from "@/lib/backendClient";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface UserInfo {
   id: string;
@@ -16,7 +19,7 @@ interface CodeLabClientProps {
   user: UserInfo;
 }
 
-// ── Placeholder data (replaced by real API calls in the next task) ────────────
+// ── Placeholder data (swapped for real API in the next task) ──────────────────
 
 const PLACEHOLDER_FILES: CodeFile[] = [
   {
@@ -44,45 +47,118 @@ const IconLab = () => (
   </svg>
 );
 
+// ── Auto-save constants ───────────────────────────────────────────────────────
+
+const AUTOSAVE_DELAY_MS = 1_000;
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CodeLabClient({ user }: CodeLabClientProps) {
-  const [files, setFiles] = useState<CodeFile[]>(PLACEHOLDER_FILES);
-  const [activeFileId, setActiveFileId] = useState<string | null>(
-    PLACEHOLDER_FILES[0]?.id ?? null
-  );
-  const [outputs, setOutputs] = useState<CodeOutputRecord[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
+  const [files, setFiles]               = useState<CodeFile[]>(PLACEHOLDER_FILES);
+  const [activeFileId, setActiveFileId] = useState<string | null>(PLACEHOLDER_FILES[0]?.id ?? null);
+  const [outputs, setOutputs]           = useState<CodeOutputRecord[]>([]);
+  const [isRunning, setIsRunning]       = useState(false);
+  const [saveStatus, setSaveStatus]     = useState<SaveStatus>("idle");
+
+  // sessionId will be populated once the real API is wired up in the next task
+  const [sessionId]                     = useState<string | null>(null);
+
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeFile = files.find((f) => f.id === activeFileId) ?? null;
 
-  function handleContentChange(content: string) {
-    setFiles((prev) =>
-      prev.map((f) => (f.id === activeFileId ? { ...f, content } : f))
-    );
-  }
+  // ── Auto-save ────────────────────────────────────────────────────────────────
+
+  const persistFile = useCallback(
+    async (fileId: string, content: string) => {
+      // Guard: skip save until a real session is loaded
+      if (!sessionId) return;
+
+      setSaveStatus("saving");
+      try {
+        const res = await fetch(
+          `${BACKEND_URL}/api/codelab/session/${sessionId}/save`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-id": user.id,
+            },
+            body: JSON.stringify({ fileId, content }),
+          }
+        );
+        if (!res.ok) throw new Error("save failed");
+
+        setSaveStatus("saved");
+        // Clear "Saved" indicator after 2 s
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 2_000);
+      } catch {
+        setSaveStatus("error");
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 3_000);
+      }
+    },
+    [sessionId, user.id]
+  );
+
+  // ── Content change handler (called on every Monaco keystroke) ───────────────
+
+  const handleContentChange = useCallback(
+    (content: string) => {
+      // 1. Keep React state in sync immediately
+      setFiles((prev) =>
+        prev.map((f) => (f.id === activeFileId ? { ...f, content } : f))
+      );
+
+      // 2. Debounce: reset timer on every keystroke, fire after 1 s of inactivity
+      setSaveStatus("idle");
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        if (activeFileId) persistFile(activeFileId, content);
+      }, AUTOSAVE_DELAY_MS);
+    },
+    [activeFileId, persistFile]
+  );
+
+  // ── File switching ───────────────────────────────────────────────────────────
+
+  const handleSelectFile = useCallback((id: string) => {
+    // Flush any pending save for the file we're leaving
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    setActiveFileId(id);
+    setSaveStatus("idle");
+  }, []);
+
+  // ── New file (wired up in next task) ────────────────────────────────────────
 
   function handleNewFile() {
-    // Logic wired up in next task
+    // API integration added in next task
   }
+
+  // ── Run (wired up in next task) ──────────────────────────────────────────────
 
   function handleRun() {
-    // Logic wired up in next task
+    // API integration added in next task
     setIsRunning(true);
-    setTimeout(() => setIsRunning(false), 1500); // placeholder pulse
+    setTimeout(() => setIsRunning(false), 1_500);
   }
 
-  function handleClearOutput() {
-    setOutputs([]);
-  }
+  // ── Clear output ─────────────────────────────────────────────────────────────
+
+  const handleClearOutput = useCallback(() => setOutputs([]), []);
+
+  // ── Derived ──────────────────────────────────────────────────────────────────
 
   const firstName = user.name?.split(" ")[0] ?? "there";
 
   return (
-    <div
-      className="flex flex-col"
-      style={{ height: "calc(100vh - 4rem)" }}
-    >
+    <div className="flex flex-col" style={{ height: "calc(100vh - 4rem)" }}>
+
       {/* ── Page header ─────────────────────────────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
@@ -90,7 +166,6 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
         className="flex items-center justify-between px-4 py-3 border-b border-[--border] bg-[--surface]/60 backdrop-blur-sm shrink-0"
       >
-        {/* Left: title */}
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[--accent-muted] text-[--accent]">
             <IconLab />
@@ -105,7 +180,6 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
           </div>
         </div>
 
-        {/* Right: run button */}
         <button
           type="button"
           onClick={handleRun}
@@ -129,19 +203,21 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
           <FileExplorer
             files={files}
             activeFileId={activeFileId}
-            onSelectFile={setActiveFileId}
+            onSelectFile={handleSelectFile}
             onNewFile={handleNewFile}
           />
         </div>
 
         {/* Editor + console column */}
         <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Editor — takes up remaining space above console */}
-          <div className="flex-1 overflow-hidden bg-[--background]/60">
-            <Editor file={activeFile} onChange={handleContentChange} />
+          <div className="flex-1 overflow-hidden">
+            <Editor
+              file={activeFile}
+              saveStatus={saveStatus}
+              onChange={handleContentChange}
+            />
           </div>
 
-          {/* Output console — fixed height */}
           <div className="h-52 shrink-0">
             <OutputConsole
               outputs={outputs}
@@ -154,9 +230,7 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
 
       {/* ── Footer status bar ────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-1.5 border-t border-[--border] bg-[--background]/80 text-[10px] text-[--muted] shrink-0">
-        <span>
-          {firstName}&apos;s session
-        </span>
+        <span>{firstName}&apos;s session</span>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
