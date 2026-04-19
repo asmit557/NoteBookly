@@ -178,7 +178,7 @@ export async function executeCode(
 
   // Docker itself failed to start (image missing, daemon down, etc.)
   // This is a server-side problem — do not persist and surface as 503.
-  if (result.exitCode === -1 && result.stderr.startsWith("Failed to start Docker:")) {
+  if (result.exitCode === -1 && result.stderr.startsWith("Failed to start Python runner:")) {
     throw new ExecutionError("Execution service unavailable: " + result.stderr);
   }
 

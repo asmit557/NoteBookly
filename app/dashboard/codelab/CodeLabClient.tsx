@@ -248,7 +248,7 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
       );
 
       if (res.status === 503) {
-        throw new Error("Execution service unavailable. Is Docker running on the backend?");
+        throw new Error("Execution service unavailable. Check backend logs.");
       }
 
       // 408 = timed out, but body still contains the CodeOutput record
