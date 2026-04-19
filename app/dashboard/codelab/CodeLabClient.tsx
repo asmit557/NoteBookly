@@ -277,6 +277,32 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
     }
   }, [sessionId, files.length, user.id]);
 
+  // ── File management (local state only — API wired separately) ────────────
+
+  const handleRenameFile = useCallback((id: string, newName: string) => {
+    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, name: newName } : f)));
+  }, []);
+
+  const handleDeleteFile = useCallback((id: string) => {
+    setFiles((prev) => {
+      const next = prev.filter((f) => f.id !== id);
+      if (activeFileId === id) setActiveFileId(next[0]?.id ?? null);
+      return next;
+    });
+  }, [activeFileId]);
+
+  const handleDuplicateFile = useCallback((id: string) => {
+    const original = files.find((f) => f.id === id);
+    if (!original) return;
+    const dot = original.name.lastIndexOf(".");
+    const copyName = dot === -1
+      ? `${original.name}_copy`
+      : `${original.name.slice(0, dot)}_copy${original.name.slice(dot)}`;
+    const copy: CodeFile = { id: `local-copy-${Date.now()}`, name: copyName, content: original.content };
+    setFiles((prev) => [...prev, copy]);
+    setActiveFileId(copy.id);
+  }, [files]);
+
   // ── Misc ──────────────────────────────────────────────────────────────────
 
   const handleClearOutput = useCallback(() => setOutputs([]), []);
@@ -374,6 +400,9 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
               activeFileId={activeFileId}
               onSelectFile={handleSelectFile}
               onNewFile={handleNewFile}
+              onRenameFile={handleRenameFile}
+              onDeleteFile={handleDeleteFile}
+              onDuplicateFile={handleDuplicateFile}
             />
           </div>
 
