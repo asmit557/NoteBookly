@@ -24,31 +24,48 @@ export async function uploadPdf(
   const safeUser = userIdentifier.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 30);
   const publicId = `nbpdf/${safeUser}/${Date.now()}_${safeName}`;
 
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        // "image" resource type is Cloudinary's native PDF support.
-        // It serves the file with Content-Type: application/pdf and
-        // Content-Disposition: inline (browser renders, not downloads).
-        // "raw" was previously used but causes CDN to block server-to-server
-        // fetches and defaults to Content-Disposition: attachment.
-        resource_type: "image",
-        public_id: publicId,
-        overwrite: false,
-        format: "pdf", // ensures URL ends in .pdf so Cloudinary delivers the original file
-        type: "upload",        // delivery type: publicly accessible (no auth required)
-        access_mode: "public", // override account-level security — allow unauthenticated delivery
-      },
-      (error, result) => {
-        if (error || !result) {
-          reject(error ?? new Error("Cloudinary upload returned no result"));
-          return;
+  const uploadResult = await new Promise<{ secure_url: string; public_id: string }>(
+    (resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          resource_type: "image",
+          public_id: publicId,
+          overwrite: false,
+          format: "pdf",
+          type: "upload",
+          access_mode: "public",
+          // Explicit anonymous grant — overrides account-level "Secured media"
+          // restrictions that would otherwise mark the asset "Blocked for delivery".
+          access_control: [{ access_type: "anonymous" }],
+        },
+        (error, result) => {
+          if (error || !result) {
+            reject(error ?? new Error("Cloudinary upload returned no result"));
+            return;
+          }
+          resolve({ secure_url: result.secure_url, public_id: result.public_id });
         }
-        resolve({ url: result.secure_url, publicId: result.public_id });
-      }
-    );
-    stream.end(buffer);
-  });
+      );
+      stream.end(buffer);
+    }
+  );
+
+  // Belt-and-suspenders: explicitly update the asset's access mode via the
+  // Admin API after upload, in case account-level security overrode the
+  // upload-time setting.
+  try {
+    await cloudinary.api.update(uploadResult.public_id, {
+      resource_type: "image",
+      type: "upload",
+      access_mode: "public",
+      access_control: [{ access_type: "anonymous" }],
+    });
+  } catch (err) {
+    // Non-fatal — the upload itself succeeded; log and continue.
+    console.warn("[cloudinary] post-upload access update failed:", err);
+  }
+
+  return { url: uploadResult.secure_url, publicId: uploadResult.public_id };
 }
 
 export async function deletePdf(publicId: string): Promise<void> {
