@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import FileExplorer, { type CodeFile } from "@/app/components/codelab/FileExplorer";
 import Editor, { type SaveStatus } from "@/app/components/codelab/Editor";
@@ -19,15 +19,25 @@ interface CodeLabClientProps {
   user: UserInfo;
 }
 
-// ── Placeholder data (swapped for real API in the next task) ──────────────────
+// Shapes returned by the backend session endpoints
+interface SessionResponse {
+  id: string;
+  name: string;
+  language: string;
+  files: CodeFile[];
+  outputs?: CodeOutputRecord[];
+}
 
-const PLACEHOLDER_FILES: CodeFile[] = [
-  {
-    id: "file-1",
-    name: "main.py",
-    content: "# Start coding here\nprint('Hello, NoteBookly!')\n",
-  },
-];
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const AUTOSAVE_DELAY_MS = 1_000;
+
+// Fallback used only while the real session is loading
+const LOADING_FILE: CodeFile = {
+  id: "__loading__",
+  name: "main.py",
+  content: "# Loading session…\n",
+};
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -47,51 +57,129 @@ const IconLab = () => (
   </svg>
 );
 
-// ── Auto-save constants ───────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-const AUTOSAVE_DELAY_MS = 1_000;
+function syntheticError(message: string): CodeOutputRecord {
+  return {
+    id: `local-${Date.now()}`,
+    stdout: null,
+    stderr: message,
+    exitCode: -1,
+    createdAt: new Date().toISOString(),
+  };
+}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CodeLabClient({ user }: CodeLabClientProps) {
-  const [files, setFiles]               = useState<CodeFile[]>(PLACEHOLDER_FILES);
-  const [activeFileId, setActiveFileId] = useState<string | null>(PLACEHOLDER_FILES[0]?.id ?? null);
-  const [outputs, setOutputs]           = useState<CodeOutputRecord[]>([]);
-  const [isRunning, setIsRunning]       = useState(false);
-  const [saveStatus, setSaveStatus]     = useState<SaveStatus>("idle");
+  const [sessionId, setSessionId]         = useState<string | null>(null);
+  const [sessionName, setSessionName]     = useState("Loading…");
+  const [sessionStatus, setSessionStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [files, setFiles]                 = useState<CodeFile[]>([LOADING_FILE]);
+  const [activeFileId, setActiveFileId]   = useState<string | null>(LOADING_FILE.id);
+  const [outputs, setOutputs]             = useState<CodeOutputRecord[]>([]);
+  const [isRunning, setIsRunning]         = useState(false);
+  const [saveStatus, setSaveStatus]       = useState<SaveStatus>("idle");
 
-  // sessionId will be populated once the real API is wired up in the next task
-  const [sessionId]                     = useState<string | null>(null);
-
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeFile = files.find((f) => f.id === activeFileId) ?? null;
 
-  // ── Auto-save ────────────────────────────────────────────────────────────────
+  // ── Session initialisation ────────────────────────────────────────────────
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function init() {
+      try {
+        const headers = { "x-user-id": user.id };
+
+        // 1. Try to load the most recent existing session
+        const listRes = await fetch(`${BACKEND_URL}/api/codelab/session`, { headers });
+        if (listRes.ok) {
+          const sessions = (await listRes.json()) as SessionResponse[];
+          if (sessions.length > 0) {
+            const latest = sessions[0];
+            const detailRes = await fetch(
+              `${BACKEND_URL}/api/codelab/session/${latest.id}`,
+              { headers }
+            );
+            if (detailRes.ok) {
+              const s = (await detailRes.json()) as SessionResponse;
+              if (!cancelled) {
+                applySession(s);
+                return;
+              }
+            }
+          }
+        }
+
+        // 2. No sessions yet — create one
+        const createRes = await fetch(`${BACKEND_URL}/api/codelab/session/create`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "My Session" }),
+        });
+        if (createRes.ok && !cancelled) {
+          applySession((await createRes.json()) as SessionResponse);
+        } else if (!cancelled) {
+          setSessionStatus("error");
+          setSessionName("Offline");
+          // Keep the editor usable — user can type but save/run will no-op
+          setFiles([{ id: "offline-1", name: "main.py", content: "# Start coding here\nprint('Hello!')\n" }]);
+          setActiveFileId("offline-1");
+        }
+      } catch {
+        if (!cancelled) {
+          setSessionStatus("error");
+          setSessionName("Offline");
+          setFiles([{ id: "offline-1", name: "main.py", content: "# Start coding here\nprint('Hello!')\n" }]);
+          setActiveFileId("offline-1");
+        }
+      }
+    }
+
+    function applySession(s: SessionResponse) {
+      setSessionId(s.id);
+      setSessionName(s.name);
+      const sessionFiles = s.files.length > 0
+        ? s.files
+        : [{ id: "fallback-1", name: "main.py", content: "# Start coding here\n" }];
+      setFiles(sessionFiles);
+      setActiveFileId(sessionFiles[0].id);
+      if (s.outputs && s.outputs.length > 0) {
+        // Show up to 50 most recent past outputs, oldest first
+        setOutputs(
+          [...s.outputs]
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+            .slice(-50)
+        );
+      }
+      setSessionStatus("ready");
+    }
+
+    init();
+    return () => { cancelled = true; };
+  }, [user.id]);
+
+  // ── Auto-save ─────────────────────────────────────────────────────────────
 
   const persistFile = useCallback(
     async (fileId: string, content: string) => {
-      // Guard: skip save until a real session is loaded
       if (!sessionId) return;
-
       setSaveStatus("saving");
       try {
         const res = await fetch(
           `${BACKEND_URL}/api/codelab/session/${sessionId}/save`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-user-id": user.id,
-            },
+            headers: { "Content-Type": "application/json", "x-user-id": user.id },
             body: JSON.stringify({ fileId, content }),
           }
         );
-        if (!res.ok) throw new Error("save failed");
-
+        if (!res.ok) throw new Error();
         setSaveStatus("saved");
-        // Clear "Saved" indicator after 2 s
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
         savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 2_000);
       } catch {
@@ -103,16 +191,11 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
     [sessionId, user.id]
   );
 
-  // ── Content change handler (called on every Monaco keystroke) ───────────────
-
   const handleContentChange = useCallback(
     (content: string) => {
-      // 1. Keep React state in sync immediately
       setFiles((prev) =>
         prev.map((f) => (f.id === activeFileId ? { ...f, content } : f))
       );
-
-      // 2. Debounce: reset timer on every keystroke, fire after 1 s of inactivity
       setSaveStatus("idle");
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
@@ -122,10 +205,9 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
     [activeFileId, persistFile]
   );
 
-  // ── File switching ───────────────────────────────────────────────────────────
+  // ── File switching ────────────────────────────────────────────────────────
 
   const handleSelectFile = useCallback((id: string) => {
-    // Flush any pending save for the file we're leaving
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
@@ -134,27 +216,96 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
     setSaveStatus("idle");
   }, []);
 
-  // ── New file (wired up in next task) ────────────────────────────────────────
+  // ── Run ───────────────────────────────────────────────────────────────────
 
-  function handleNewFile() {
-    // API integration added in next task
-  }
+  const handleRun = useCallback(async () => {
+    if (!sessionId || !activeFile || isRunning) return;
 
-  // ── Run (wired up in next task) ──────────────────────────────────────────────
+    // Flush pending auto-save so the backend always has the latest code
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
 
-  function handleRun() {
-    // API integration added in next task
     setIsRunning(true);
-    setTimeout(() => setIsRunning(false), 1_500);
-  }
 
-  // ── Clear output ─────────────────────────────────────────────────────────────
+    try {
+      // 1. Ensure latest content is persisted before executing
+      await fetch(`${BACKEND_URL}/api/codelab/session/${sessionId}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-user-id": user.id },
+        body: JSON.stringify({ fileId: activeFile.id, content: activeFile.content }),
+      });
+
+      // 2. Execute
+      const res = await fetch(
+        `${BACKEND_URL}/api/codelab/session/${sessionId}/run`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-user-id": user.id },
+          body: JSON.stringify({ fileId: activeFile.id }),
+        }
+      );
+
+      if (res.status === 503) {
+        throw new Error("Execution service unavailable. Is Docker running on the backend?");
+      }
+
+      // 408 = timed out, but body still contains the CodeOutput record
+      const output = (await res.json()) as CodeOutputRecord;
+      setOutputs((prev) => [...prev, output]);
+    } catch (err) {
+      setOutputs((prev) => [
+        ...prev,
+        syntheticError(err instanceof Error ? err.message : "Execution failed"),
+      ]);
+    } finally {
+      setIsRunning(false);
+    }
+  }, [sessionId, activeFile, isRunning, user.id]);
+
+  // ── New file ──────────────────────────────────────────────────────────────
+  // (full API wiring deferred — add file to local state for now)
+
+  const handleNewFile = useCallback(async () => {
+    if (!sessionId) return;
+    const name = `script_${files.length + 1}.py`;
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/codelab/session/${sessionId}/files`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-user-id": user.id },
+          body: JSON.stringify({ name, content: `# ${name}\n` }),
+        }
+      );
+      if (res.ok) {
+        const newFile = (await res.json()) as CodeFile;
+        setFiles((prev) => [...prev, newFile]);
+        setActiveFileId(newFile.id);
+      }
+    } catch {
+      // Optimistic local fallback when backend is offline
+      const newFile: CodeFile = { id: `local-${Date.now()}`, name, content: `# ${name}\n` };
+      setFiles((prev) => [...prev, newFile]);
+      setActiveFileId(newFile.id);
+    }
+  }, [sessionId, files.length, user.id]);
+
+  // ── Misc ──────────────────────────────────────────────────────────────────
 
   const handleClearOutput = useCallback(() => setOutputs([]), []);
-
-  // ── Derived ──────────────────────────────────────────────────────────────────
-
   const firstName = user.name?.split(" ")[0] ?? "there";
+
+  // ── Footer indicators ─────────────────────────────────────────────────────
+
+  const footerDot =
+    sessionStatus === "ready"  ? "bg-emerald-400" :
+    sessionStatus === "error"  ? "bg-red-400"     : "bg-yellow-400 animate-pulse";
+
+  const footerLabel =
+    sessionStatus === "ready"  ? "Backend connected" :
+    sessionStatus === "error"  ? "Backend offline" : "Connecting…";
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 4rem)" }}>
@@ -175,7 +326,7 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
               Code Lab
             </p>
             <p className="text-[11px] text-[--muted]">
-              Untitled Session · Python 3.10
+              {sessionName} · Python 3.10
             </p>
           </div>
         </div>
@@ -183,7 +334,7 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
         <button
           type="button"
           onClick={handleRun}
-          disabled={isRunning || !activeFile}
+          disabled={isRunning || !activeFile || sessionStatus !== "ready"}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-[--accent] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity cursor-pointer"
         >
           {isRunning ? <IconSpinner /> : <IconPlay />}
@@ -198,21 +349,19 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
         transition={{ duration: 0.4, delay: 0.1 }}
         className="flex flex-1 overflow-hidden"
       >
-        {/* File explorer sidebar */}
         <div className="w-48 shrink-0">
           <FileExplorer
-            files={files}
+            files={files.filter((f) => f.id !== LOADING_FILE.id)}
             activeFileId={activeFileId}
             onSelectFile={handleSelectFile}
             onNewFile={handleNewFile}
           />
         </div>
 
-        {/* Editor + console column */}
         <div className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 overflow-hidden">
             <Editor
-              file={activeFile}
+              file={sessionStatus === "loading" ? LOADING_FILE : activeFile}
               saveStatus={saveStatus}
               onChange={handleContentChange}
             />
@@ -222,6 +371,7 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
             <OutputConsole
               outputs={outputs}
               isRunning={isRunning}
+              sessionStatus={sessionStatus}
               onClear={handleClearOutput}
             />
           </div>
@@ -233,10 +383,12 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
         <span>{firstName}&apos;s session</span>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Backend connected
+            <span className={`h-1.5 w-1.5 rounded-full ${footerDot}`} />
+            {footerLabel}
           </span>
-          <span>Docker ready</span>
+          {sessionId && (
+            <span className="font-mono opacity-50">{sessionId.slice(0, 8)}</span>
+          )}
         </div>
       </div>
     </div>

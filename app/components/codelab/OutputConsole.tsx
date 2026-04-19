@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 export interface CodeOutputRecord {
   id: string;
   stdout: string | null;
@@ -11,6 +13,7 @@ export interface CodeOutputRecord {
 interface OutputConsoleProps {
   outputs: CodeOutputRecord[];
   isRunning: boolean;
+  sessionStatus: "loading" | "ready" | "error";
   onClear: () => void;
 }
 
@@ -86,8 +89,21 @@ function OutputBlock({ output }: { output: CodeOutputRecord }) {
 export default function OutputConsole({
   outputs,
   isRunning,
+  sessionStatus,
   onClear,
 }: OutputConsoleProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [outputs, isRunning]);
+
+  const emptyMessage =
+    sessionStatus === "loading" ? "Connecting to session…" :
+    isRunning                   ? "Waiting for output…"   :
+                                  "Run your code to see output here";
+
   return (
     <div className="flex flex-col h-full border-t border-[--border]">
 
@@ -125,17 +141,14 @@ export default function OutputConsole({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 font-mono bg-[--background]/80">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 font-mono bg-[--background]/80">
         {outputs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
-            <p className="text-[11px] text-[--muted]">
-              {isRunning ? "Waiting for output…" : "Run your code to see output here"}
-            </p>
+            <p className="text-[11px] text-[--muted]">{emptyMessage}</p>
           </div>
         ) : (
-          /* Most recent run first */
           [...outputs]
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
             .map((out) => <OutputBlock key={out.id} output={out} />)
         )}
       </div>
