@@ -24,6 +24,7 @@ export async function sendEmail({ to, subject, react }: SendEmailOptions): Promi
 
   const { error } = await resend.emails.send({
     from: process.env.EMAIL_FROM ?? "NoteBookly <onboarding@resend.dev>",
+    reply_to: process.env.EMAIL_REPLY_TO,   // optional — your personal email
     to,
     subject,
     html,
