@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import codelabRouter from "./codelab/routes/codelab.routes";
 
 dotenv.config();
 
@@ -22,6 +23,9 @@ app.use(express.json({ limit: "50mb" }));
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "notebookly-backend" });
 });
+
+// ── Feature routers ───────────────────────────────────────────────────────────
+app.use("/api/codelab", codelabRouter);
 
 app.listen(PORT, () => {
   console.log(`[backend] running on http://localhost:${PORT}`);
