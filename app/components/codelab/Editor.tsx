@@ -186,9 +186,7 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
 export default function Editor({ file, saveStatus, onChange }: EditorProps) {
   // Define the custom theme before the editor mounts (runs once per page load)
   const handleBeforeMount: BeforeMount = (monaco) => {
-    if (!monaco.editor.getEditorTheme().includes("notebookly")) {
-      monaco.editor.defineTheme("notebookly-dark", NOTEBOOKLY_DARK);
-    }
+    monaco.editor.defineTheme("notebookly-dark", NOTEBOOKLY_DARK);
   };
 
   if (!file) {

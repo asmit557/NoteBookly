@@ -16,7 +16,6 @@ export default async function CodeLabPage() {
   }
 
   // Upsert so the user row always exists; get the Prisma DB id (not the OAuth sub)
-  console.log("[codelab] loading for", session.user.email);
   const user = await prisma.user.upsert({
     where: { email: session.user.email },
     update: {
