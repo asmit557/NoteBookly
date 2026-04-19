@@ -7,6 +7,9 @@ function handleError(res: Response, err: unknown) {
   if (err instanceof svc.NotFoundError) {
     return res.status(404).json({ message: err.message });
   }
+  if (err instanceof svc.ConflictError) {
+    return res.status(409).json({ message: err.message });
+  }
   if (err instanceof svc.ExecutionError) {
     return res.status(503).json({ message: err.message });
   }
@@ -130,9 +133,6 @@ export async function deleteFileById(req: Request, res: Response) {
     await svc.deleteFileById(fileId, userId);
     res.status(204).send();
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith("Cannot delete the last file")) {
-      return res.status(409).json({ message: err.message });
-    }
     handleError(res, err);
   }
 }

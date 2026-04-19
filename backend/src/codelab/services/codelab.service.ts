@@ -10,6 +10,13 @@ export class NotFoundError extends Error {
   }
 }
 
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConflictError";
+  }
+}
+
 export class ExecutionError extends Error {
   constructor(message: string) {
     super(message);
@@ -118,21 +125,32 @@ export async function deleteFile(
   fileId: string
 ) {
   await assertOwnership(sessionId, userId);
-  const file = await prisma.codeFile.findFirst({
-    where: { id: fileId, sessionId },
-    select: { id: true },
+
+  await prisma.$transaction(async (tx) => {
+    const file = await tx.codeFile.findFirst({
+      where: { id: fileId, sessionId },
+      select: { id: true },
+    });
+    if (!file) throw new NotFoundError("File not found");
+
+    const count = await tx.codeFile.count({ where: { sessionId } });
+    if (count <= 1) throw new ConflictError("Cannot delete the last file in a session");
+
+    await tx.codeFile.delete({ where: { id: fileId } });
   });
-  if (!file) throw new NotFoundError("File not found");
-  await prisma.codeFile.delete({ where: { id: fileId } });
 }
 
 // ── File-centric services (ownership via session) ─────────────────────────────
 
-/** Resolve a file and verify the owning session belongs to the user. */
+/**
+ * Verify the file exists AND its session belongs to the user.
+ * Returns only the fields needed for ownership/routing — does NOT fetch content,
+ * so callers that need content must query it separately.
+ */
 async function assertFileOwnership(fileId: string, userId: string) {
   const file = await prisma.codeFile.findFirst({
     where: { id: fileId, session: { userId } },
-    include: { session: { select: { id: true } } },
+    select: { id: true, name: true, sessionId: true },
   });
   if (!file) throw new NotFoundError("File not found");
   return file;
@@ -153,20 +171,26 @@ export async function renameFile(fileId: string, userId: string, name: string) {
 }
 
 export async function deleteFileById(fileId: string, userId: string) {
-  const file = await assertFileOwnership(fileId, userId);
-  const sessionId = file.session.id;
+  const { sessionId } = await assertFileOwnership(fileId, userId);
 
-  const count = await prisma.codeFile.count({ where: { sessionId } });
-  if (count <= 1) throw new Error("Cannot delete the last file in a session");
-
-  await prisma.codeFile.delete({ where: { id: fileId } });
+  await prisma.$transaction(async (tx) => {
+    const count = await tx.codeFile.count({ where: { sessionId } });
+    if (count <= 1) throw new ConflictError("Cannot delete the last file in a session");
+    await tx.codeFile.delete({ where: { id: fileId } });
+  });
 }
 
 export async function duplicateFile(fileId: string, userId: string) {
-  const file = await assertFileOwnership(fileId, userId);
+  // Fetch content alongside the ownership check — content is needed for the copy.
+  const file = await prisma.codeFile.findFirst({
+    where: { id: fileId, session: { userId } },
+    select: { id: true, name: true, content: true, sessionId: true },
+  });
+  if (!file) throw new NotFoundError("File not found");
+
   return prisma.codeFile.create({
     data: {
-      sessionId: file.session.id,
+      sessionId: file.sessionId,
       name: buildCopyName(file.name),
       content: file.content,
     },
