@@ -9,13 +9,14 @@ datasource db {
 }
 
 model User {
-  id                String       @id @default(cuid())
-  email             String       @unique
+  id                String        @id @default(cuid())
+  email             String        @unique
   name              String?
   image             String?
-  emailWelcomeSent  Boolean      @default(false)
-  createdAt         DateTime     @default(now())
+  emailWelcomeSent  Boolean       @default(false)
+  createdAt         DateTime      @default(now())
   conversions       Conversion[]
+  codeSessions      CodeSession[]
 }
 
 model Conversion {
@@ -29,4 +30,44 @@ model Conversion {
   createdAt DateTime @default(now())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Code Lab ──────────────────────────────────────────────────────────────────
+
+model CodeSession {
+  id        String       @id @default(cuid())
+  name      String       @default("Untitled Session")
+  language  String       @default("python")
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files     CodeFile[]
+  outputs   CodeOutput[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+model CodeFile {
+  id        String      @id @default(cuid())
+  name      String
+  content   String      @db.Text
+  sessionId String
+  session   CodeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([sessionId])
+}
+
+model CodeOutput {
+  id        String      @id @default(cuid())
+  stdout    String?     @db.Text
+  stderr    String?     @db.Text
+  exitCode  Int?
+  sessionId String
+  session   CodeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@index([sessionId])
 }
