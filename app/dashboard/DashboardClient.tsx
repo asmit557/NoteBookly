@@ -340,7 +340,7 @@ function ConversionCard({
       {/* Actions */}
       <div className="flex gap-2 pt-2 border-t border-[--border]">
         <a
-          href={c.pdfUrl}
+          href={`/api/pdf?url=${encodeURIComponent(c.pdfUrl)}&name=${encodeURIComponent(c.fileName)}`}
           target="_blank"
           rel="noopener noreferrer"
           className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-xl text-xs font-semibold bg-[--accent-muted] text-[--accent] hover:bg-[--accent] hover:text-white transition-all duration-200"
@@ -518,7 +518,7 @@ function PreviewPanel({ last }: { last: ConversionRecord | null }) {
         </span>
         {last && (
           <a
-            href={last.pdfUrl}
+            href={`/api/pdf?url=${encodeURIComponent(last.pdfUrl)}&name=${encodeURIComponent(last.fileName)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[10px] font-semibold text-[--accent] hover:underline"
