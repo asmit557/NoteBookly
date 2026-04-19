@@ -40,12 +40,21 @@ export default function Navbar() {
           </a>
 
           {status === "authenticated" && (
-            <a
-              href="/dashboard"
-              className="flex items-center gap-1.5 h-8 rounded-lg px-3 text-xs font-semibold text-[--foreground] bg-[--surface] hover:bg-[--surface-hover] border border-[--border] hover:border-[--accent]/40 transition-all"
-            >
-              Dashboard
-            </a>
+            <>
+              <a
+                href="/dashboard"
+                className="flex items-center gap-1.5 h-8 rounded-lg px-3 text-xs font-semibold text-[--foreground] bg-[--surface] hover:bg-[--surface-hover] border border-[--border] hover:border-[--accent]/40 transition-all"
+              >
+                Dashboard
+              </a>
+              <a
+                href="/dashboard/codelab"
+                className="flex items-center gap-1.5 h-8 rounded-lg px-3 text-xs font-semibold text-[--foreground] bg-[--surface] hover:bg-[--surface-hover] border border-[--border] hover:border-[--accent]/40 transition-all"
+              >
+                <CodeLabIcon />
+                Code Lab
+              </a>
+            </>
           )}
         </div>
 
@@ -126,6 +135,15 @@ function MoonIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  );
+}
+
+function CodeLabIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <polyline points="16 18 22 12 16 6"/>
+      <polyline points="8 6 2 12 8 18"/>
     </svg>
   );
 }
