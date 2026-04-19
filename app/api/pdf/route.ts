@@ -19,7 +19,6 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Validate the URL belongs to our Cloudinary account ────────────────────
-  // Prevents this route from being used as an open proxy.
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const expectedPrefix = `https://res.cloudinary.com/${cloudName}/`;
 
@@ -27,41 +26,52 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Invalid URL" }, { status: 400 });
   }
 
+  // ── Sanitise the filename once ─────────────────────────────────────────────
+  const safeName = fileName
+    .replace(/[^\w\s.-]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/\.pdf$/i, "")
+    .slice(0, 100)
+    .concat(".pdf");
+
   // ── Fetch from Cloudinary and pipe back with correct headers ──────────────
   try {
-    const upstream = await fetch(cloudinaryUrl);
+    const upstream = await fetch(cloudinaryUrl, {
+      // Bypass Next.js's data cache — always fetch fresh from Cloudinary
+      cache: "no-store",
+      headers: {
+        // Some CDNs require a recognisable User-Agent
+        "User-Agent": "Mozilla/5.0 (compatible; NoteBookly/1.0)",
+        "Accept": "application/pdf, application/octet-stream, */*",
+      },
+    });
 
     if (!upstream.ok) {
-      return NextResponse.json(
-        { message: "Failed to fetch PDF from storage" },
-        { status: 502 }
+      // Log the real status so it's visible in Vercel function logs
+      console.error(
+        `[pdf] Cloudinary returned ${upstream.status} ${upstream.statusText} for: ${cloudinaryUrl}`
       );
+      // Redirect directly to Cloudinary as fallback — the browser will handle
+      // whatever Content-Disposition Cloudinary sends rather than showing an error.
+      return NextResponse.redirect(cloudinaryUrl, { status: 302 });
     }
 
     const buffer = await upstream.arrayBuffer();
 
-    // Sanitise the filename for use in the Content-Disposition header
-    const safeName = fileName
-      .replace(/[^\w\s.-]/g, "")
-      .replace(/\s+/g, "_")
-      .replace(/\.pdf$/i, "")
-      .slice(0, 100)
-      .concat(".pdf");
-
     return new NextResponse(buffer, {
       status: 200,
       headers: {
-        // Force PDF MIME type — overrides whatever Cloudinary sends
+        // Override whatever Cloudinary sends — guarantee PDF MIME type
         "Content-Type": "application/pdf",
-        // "inline" tells the browser to render in its built-in PDF viewer
+        // "inline" → browser PDF viewer instead of download prompt
         "Content-Disposition": `inline; filename="${safeName}"`,
         "Content-Length": String(buffer.byteLength),
-        // Allow browser to cache for 1 hour
         "Cache-Control": "private, max-age=3600",
       },
     });
   } catch (err) {
-    console.error("[pdf] proxy error:", err);
-    return NextResponse.json({ message: "Internal error" }, { status: 500 });
+    console.error("[pdf] proxy fetch threw:", err);
+    // Network-level failure — redirect to Cloudinary as last resort
+    return NextResponse.redirect(cloudinaryUrl, { status: 302 });
   }
 }

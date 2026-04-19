@@ -27,10 +27,15 @@ export async function uploadPdf(
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
-        resource_type: "raw",
+        // "image" resource type is Cloudinary's native PDF support.
+        // It serves the file with Content-Type: application/pdf and
+        // Content-Disposition: inline (browser renders, not downloads).
+        // "raw" was previously used but causes CDN to block server-to-server
+        // fetches and defaults to Content-Disposition: attachment.
+        resource_type: "image",
         public_id: publicId,
         overwrite: false,
-        format: "pdf",
+        format: "pdf", // ensures URL ends in .pdf so Cloudinary delivers the original file
       },
       (error, result) => {
         if (error || !result) {
@@ -45,5 +50,11 @@ export async function uploadPdf(
 }
 
 export async function deletePdf(publicId: string): Promise<void> {
-  await cloudinary.uploader.destroy(publicId, { resource_type: "raw" });
+  // Try "image" first (new uploads), fall back to "raw" for existing records
+  // that were stored before this fix.
+  try {
+    await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
+  } catch {
+    await cloudinary.uploader.destroy(publicId, { resource_type: "raw" });
+  }
 }
