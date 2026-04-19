@@ -1,4 +1,5 @@
 import { prisma } from "../../lib/prisma";
+import { runPython } from "../execution/docker.runner";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -6,6 +7,13 @@ export class NotFoundError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "NotFoundError";
+  }
+}
+
+export class ExecutionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExecutionError";
   }
 }
 
@@ -127,4 +135,68 @@ export async function getOutputs(sessionId: string, userId: string) {
     orderBy: { createdAt: "desc" },
     take: 50,
   });
+}
+
+// ── Execution service ─────────────────────────────────────────────────────────
+
+/**
+ * Run the target file through the Docker sandbox and persist the result.
+ *
+ * Resolution order for the file to execute:
+ *   1. fileId explicitly passed in the request body
+ *   2. The file named "main.py" in the session
+ *   3. The first file in the session (fallback)
+ *
+ * The CodeOutput row is always appended — never overwritten — so the full
+ * execution history is preserved.
+ */
+export async function executeCode(
+  sessionId: string,
+  userId: string,
+  fileId?: string
+) {
+  // 1. Fetch session + files (ownership check included)
+  const session = await prisma.codeSession.findFirst({
+    where: { id: sessionId, userId },
+    include: { files: { orderBy: { createdAt: "asc" } } },
+  });
+  if (!session) throw new NotFoundError("Session not found");
+
+  // 2. Resolve which file to run
+  let target = fileId
+    ? session.files.find((f) => f.id === fileId)
+    : session.files.find((f) => f.name === "main.py") ?? session.files[0];
+
+  if (!target) {
+    throw new NotFoundError(
+      fileId ? "File not found" : "No files in session"
+    );
+  }
+
+  // 3. Execute in Docker sandbox
+  const result = await runPython(target.content);
+
+  // Docker itself failed to start (image missing, daemon down, etc.)
+  // This is a server-side problem — do not persist and surface as 503.
+  if (result.exitCode === -1 && result.stderr.startsWith("Failed to start Docker:")) {
+    throw new ExecutionError("Execution service unavailable: " + result.stderr);
+  }
+
+  // 4. Normalise timeout: use exit code 124 (POSIX convention) and prefix stderr
+  const exitCode = result.timedOut ? 124 : result.exitCode;
+  const stderr = result.timedOut
+    ? `[timeout] execution exceeded 5 seconds\n${result.stderr}`.trimEnd()
+    : result.stderr || null;
+
+  // 5. Append output record — never update existing rows (history is immutable)
+  const output = await prisma.codeOutput.create({
+    data: {
+      sessionId,
+      stdout: result.stdout || null,
+      stderr: stderr || null,
+      exitCode,
+    },
+  });
+
+  return { output, timedOut: result.timedOut };
 }

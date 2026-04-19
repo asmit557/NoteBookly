@@ -7,6 +7,9 @@ function handleError(res: Response, err: unknown) {
   if (err instanceof svc.NotFoundError) {
     return res.status(404).json({ message: err.message });
   }
+  if (err instanceof svc.ExecutionError) {
+    return res.status(503).json({ message: err.message });
+  }
   console.error("[codelab]", err);
   return res.status(500).json({ message: "Internal server error" });
 }
@@ -116,8 +119,19 @@ export async function getOutputs(req: Request, res: Response) {
   }
 }
 
-// ── Execution stub ────────────────────────────────────────────────────────────
+// ── Execution ─────────────────────────────────────────────────────────────────
 
-export async function runCode(_req: Request, res: Response) {
-  res.status(501).json({ message: "Docker execution not implemented yet" });
+export async function runCode(req: Request, res: Response) {
+  try {
+    const userId = res.locals.userId as string;
+    const { id } = req.params;
+    const { fileId } = req.body as { fileId?: string };
+
+    const { output, timedOut } = await svc.executeCode(id, userId, fileId);
+
+    // 408 signals the client that the run was killed for exceeding the time limit
+    res.status(timedOut ? 408 : 200).json(output);
+  } catch (err) {
+    handleError(res, err);
+  }
 }
