@@ -8,6 +8,8 @@ import hljs from "highlight.js";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadPdf } from "@/lib/cloudinary";
+import { sendEmail } from "@/lib/email/sendEmail";
+import { createConversionEmail } from "@/lib/email/templates/ConversionEmail";
 
 // Vercel: run as Node.js (not Edge), allow up to 60 s for Chromium
 export const runtime = "nodejs";
@@ -417,6 +419,7 @@ export async function POST(request: NextRequest) {
     }
 
     const theme = (formData.get("theme") as string) || "light";
+    const cellCount = notebook.cells.length;
     const html = generateHTML(notebook, theme);
 
     browser = await puppeteer.launch(await getBrowserOptions());
@@ -435,6 +438,9 @@ export async function POST(request: NextRequest) {
     // ── Persist to Cloudinary + DB (best-effort, don't fail conversion) ──────
     try {
       const userEmail = session.user.email!;
+      const firstName = session.user.name?.split(" ")[0] ?? "there";
+      const appUrl =
+        process.env.NEXT_PUBLIC_APP_URL ?? "https://notebookly.vercel.app";
 
       const [cloudResult, dbUser] = await Promise.all([
         uploadPdf(pdf, downloadName, userEmail),
@@ -463,9 +469,31 @@ export async function POST(request: NextRequest) {
           userId: dbUser.id,
         },
       });
+
+      // ── Send conversion notification email ──────────────────────────────────
+      const fileSizeKB =
+        pdf.byteLength < 1024 * 1024
+          ? `${(pdf.byteLength / 1024).toFixed(1)} KB`
+          : `${(pdf.byteLength / (1024 * 1024)).toFixed(1)} MB`;
+
+      await sendEmail({
+        to: userEmail,
+        subject: `Your PDF is ready — ${downloadName}`,
+        react: createConversionEmail({
+          name: firstName,
+          notebookName: file.name,
+          pdfName: downloadName,
+          pdfUrl: cloudResult.url,
+          convertedAt: new Date().toISOString(),
+          fileSize: fileSizeKB,
+          theme,
+          cellCount,
+          appUrl,
+        }),
+      });
     } catch (storageErr) {
-      // Log but never fail the user's download because of a storage error
-      console.error("[convert] storage error (non-fatal):", storageErr);
+      // Log but never fail the user's download because of a storage/email error
+      console.error("[convert] storage/email error (non-fatal):", storageErr);
     }
 
     return new NextResponse(pdf, {

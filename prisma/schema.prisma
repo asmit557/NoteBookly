@@ -9,12 +9,13 @@ datasource db {
 }
 
 model User {
-  id          String       @id @default(cuid())
-  email       String       @unique
-  name        String?
-  image       String?
-  createdAt   DateTime     @default(now())
-  conversions Conversion[]
+  id                String       @id @default(cuid())
+  email             String       @unique
+  name              String?
+  image             String?
+  emailWelcomeSent  Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  conversions       Conversion[]
 }
 
 model Conversion {
