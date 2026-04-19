@@ -1,8 +1,24 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import { render } from "@react-email/render";
 import type { ReactElement } from "react";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazily created so the module can be imported without crashing when env vars
+// are missing (e.g. during `next build` on Vercel before secrets are set).
+let _transporter: nodemailer.Transporter | null = null;
+
+function getTransporter(): nodemailer.Transporter {
+  if (_transporter) return _transporter;
+
+  _transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD, // Gmail App Password (16 chars)
+    },
+  });
+
+  return _transporter;
+}
 
 export interface SendEmailOptions {
   to: string;
@@ -11,26 +27,22 @@ export interface SendEmailOptions {
 }
 
 /**
- * Send a transactional email via Resend.
- * Gracefully no-ops if RESEND_API_KEY is not configured.
+ * Send a transactional email via Gmail SMTP (Nodemailer).
+ * Gracefully no-ops if credentials are not configured.
  */
 export async function sendEmail({ to, subject, react }: SendEmailOptions): Promise<void> {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn("[email] RESEND_API_KEY not configured — email skipped");
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    console.warn("[email] Gmail credentials not configured — email skipped");
     return;
   }
 
   const html = await render(react);
 
-  const { error } = await resend.emails.send({
-    from: process.env.EMAIL_FROM ?? "NoteBookly <onboarding@resend.dev>",
-    reply_to: process.env.EMAIL_REPLY_TO,   // optional — your personal email
+  await getTransporter().sendMail({
+    from: process.env.EMAIL_FROM ?? `NoteBookly <${process.env.GMAIL_USER}>`,
+    replyTo: process.env.EMAIL_REPLY_TO,
     to,
     subject,
     html,
   });
-
-  if (error) {
-    throw new Error(`Resend send error: ${JSON.stringify(error)}`);
-  }
 }
