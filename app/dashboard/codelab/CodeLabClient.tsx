@@ -67,6 +67,17 @@ function syntheticError(message: string): CodeOutputRecord {
   };
 }
 
+function generateUniqueName(name: string, taken: Set<string>): string {
+  if (!taken.has(name)) return name;
+  const dot  = name.lastIndexOf(".");
+  const base = dot === -1 ? name : name.slice(0, dot);
+  const ext  = dot === -1 ? ""   : name.slice(dot);
+  let n = 2;
+  let candidate: string;
+  do { candidate = `${base} (${n++})${ext}`; } while (taken.has(candidate));
+  return candidate;
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CodeLabClient({ user }: CodeLabClientProps) {
@@ -83,13 +94,17 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast]               = useState<string | null>(null);
+  const [pendingFileIds, setPendingFileIds] = useState<string[]>([]);
 
   const showError = useCallback((message: string) => {
     setToast(message);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(null), 3500);
   }, []);
+
+  const addPending    = useCallback((id: string) => setPendingFileIds((p) => [...p, id]), []);
+  const removePending = useCallback((id: string) => setPendingFileIds((p) => p.filter((x) => x !== id)), []);
 
   const activeFile = files.find((f) => f.id === activeFileId) ?? null;
 
@@ -264,7 +279,8 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
 
   const handleNewFile = useCallback(async () => {
     if (!sessionId) return;
-    const name = `script_${files.length + 1}.py`;
+    const taken = new Set(files.map((f) => f.name));
+    const name  = generateUniqueName(`script_${files.length + 1}.py`, taken);
     try {
       const res = await fetch(
         `${BACKEND_URL}/api/codelab/session/${sessionId}/files`,
@@ -284,14 +300,17 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
       setFiles((prev) => [...prev, newFile]);
       setActiveFileId(newFile.id);
     }
-  }, [sessionId, files.length, user.id]);
+  }, [sessionId, files, user.id]);
 
   // ── File management ───────────────────────────────────────────────────────
 
   const handleRenameFile = useCallback(async (id: string, newName: string) => {
+    // Guard: block concurrent operations on the same file
+    if (pendingFileIds.includes(id)) return;
     const previous = files.find((f) => f.id === id);
     if (!previous) return;
 
+    addPending(id);
     // Optimistic: rename immediately
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, name: newName } : f)));
 
@@ -306,20 +325,25 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
         throw new Error(data.message ?? "Rename failed");
       }
     } catch (err) {
-      // Roll back to previous name
       setFiles((prev) => prev.map((f) => (f.id === id ? previous : f)));
       showError(err instanceof Error ? err.message : "Rename failed");
+    } finally {
+      removePending(id);
     }
-  }, [files, user.id, showError]);
+  }, [files, pendingFileIds, addPending, removePending, user.id, showError]);
 
   const handleDeleteFile = useCallback(async (id: string) => {
     const snapshotFiles    = files;
     const snapshotActiveId = activeFileId;
 
-    // Optimistic: remove file and navigate to the next available file
+    // Optimistic: remove and navigate to the adjacent file (not always [0])
     const nextFiles = snapshotFiles.filter((f) => f.id !== id);
     setFiles(nextFiles);
-    if (snapshotActiveId === id) setActiveFileId(nextFiles[0]?.id ?? null);
+    if (snapshotActiveId === id) {
+      const deletedIdx = snapshotFiles.findIndex((f) => f.id === id);
+      const fallback   = nextFiles[deletedIdx] ?? nextFiles[deletedIdx - 1] ?? null;
+      setActiveFileId(fallback?.id ?? null);
+    }
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/codelab/file/${id}`, {
@@ -331,7 +355,6 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
         throw new Error(data.message ?? "Delete failed");
       }
     } catch (err) {
-      // Roll back — restore files and re-select the deleted file
       setFiles(snapshotFiles);
       setActiveFileId(snapshotActiveId);
       showError(err instanceof Error ? err.message : "Delete failed");
@@ -339,7 +362,10 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
   }, [files, activeFileId, user.id, showError]);
 
   const handleDuplicateFile = useCallback(async (id: string) => {
-    // Not optimistic — need the server-assigned ID for the new file
+    // Guard: block concurrent duplicate on the same file
+    if (pendingFileIds.includes(id)) return;
+
+    addPending(id);
     try {
       const res = await fetch(`${BACKEND_URL}/api/codelab/file/${id}/duplicate`, {
         method: "POST",
@@ -350,12 +376,37 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
         throw new Error(data.message ?? "Duplicate failed");
       }
       const newFile = (await res.json()) as CodeFile;
-      setFiles((prev) => [...prev, newFile]);
-      setActiveFileId(newFile.id);
+
+      // Resolve name collision: if the server-generated name already exists
+      // locally, auto-suffix it and persist the unique name via a rename call.
+      const taken      = new Set(files.map((f) => f.name));
+      const finalName  = generateUniqueName(newFile.name, taken);
+      let   finalFile  = newFile;
+
+      if (finalName !== newFile.name) {
+        try {
+          const renameRes = await fetch(
+            `${BACKEND_URL}/api/codelab/file/${newFile.id}/rename`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", "x-user-id": user.id },
+              body: JSON.stringify({ name: finalName }),
+            }
+          );
+          if (renameRes.ok) finalFile = { ...newFile, name: finalName };
+        } catch {
+          // Non-fatal: add with the colliding name; user can rename manually
+        }
+      }
+
+      setFiles((prev) => [...prev, finalFile]);
+      setActiveFileId(finalFile.id);
     } catch (err) {
       showError(err instanceof Error ? err.message : "Duplicate failed");
+    } finally {
+      removePending(id);
     }
-  }, [user.id, showError]);
+  }, [files, pendingFileIds, addPending, removePending, user.id, showError]);
 
   // ── Misc ──────────────────────────────────────────────────────────────────
 
@@ -452,6 +503,7 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
             <FileExplorer
               files={files.filter((f) => f.id !== LOADING_FILE.id)}
               activeFileId={activeFileId}
+              pendingFileIds={pendingFileIds}
               onSelectFile={handleSelectFile}
               onNewFile={handleNewFile}
               onRenameFile={handleRenameFile}

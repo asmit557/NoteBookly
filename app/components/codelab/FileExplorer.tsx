@@ -12,11 +12,22 @@ export interface CodeFile {
 interface FileExplorerProps {
   files: CodeFile[];
   activeFileId: string | null;
+  pendingFileIds?: string[];
   onSelectFile: (id: string) => void;
   onNewFile: () => void;
   onRenameFile: (id: string, newName: string) => void;
   onDeleteFile: (id: string) => void;
   onDuplicateFile: (id: string) => void;
+}
+
+// ── Validation ────────────────────────────────────────────────────────────────
+
+function validateName(name: string, fileId: string, files: CodeFile[]): string | null {
+  const trimmed = name.trim();
+  if (!trimmed) return "Name is required";
+  if (trimmed.includes("/") || trimmed.includes("\\")) return "Name can't contain slashes";
+  if (files.some((f) => f.id !== fileId && f.name === trimmed)) return "A file with this name already exists";
+  return null;
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -70,6 +81,12 @@ const IconTrash = () => (
   </svg>
 );
 
+function Spinner() {
+  return (
+    <span className="h-3 w-3 animate-spin rounded-full border border-[--muted] border-t-transparent" />
+  );
+}
+
 function fileIcon(name: string) {
   if (name.endsWith(".py")) return <IconPy />;
   return (
@@ -96,7 +113,6 @@ interface ContextMenuProps {
 function ContextMenu({ pos, canDelete, onRename, onDuplicate, onDelete, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside click — delayed so the opening click doesn't immediately dismiss
   useEffect(() => {
     let removeListener: (() => void) | undefined;
     const timer = setTimeout(() => {
@@ -115,7 +131,7 @@ function ContextMenu({ pos, canDelete, onRename, onDuplicate, onDelete, onClose 
       style={{ position: "fixed", right: pos.right, top: pos.top }}
       className="z-[200] w-36 rounded-xl border border-white/[0.08] bg-[#0d0d1a] shadow-2xl shadow-black/60 overflow-hidden py-1"
     >
-      <MenuItem icon={<IconEdit />} label="Rename" onClick={() => { onClose(); onRename(); }} />
+      <MenuItem icon={<IconEdit />} label="Rename"    onClick={() => { onClose(); onRename(); }} />
       <MenuItem icon={<IconCopy />} label="Duplicate" onClick={() => { onClose(); onDuplicate(); }} />
       <div className="my-1 border-t border-white/[0.06]" />
       <MenuItem
@@ -132,12 +148,7 @@ function ContextMenu({ pos, canDelete, onRename, onDuplicate, onDelete, onClose 
 }
 
 function MenuItem({
-  icon,
-  label,
-  danger,
-  disabled,
-  title,
-  onClick,
+  icon, label, danger, disabled, title, onClick,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -167,9 +178,7 @@ function MenuItem({
 // ── Delete confirmation modal ─────────────────────────────────────────────────
 
 function DeleteModal({
-  fileName,
-  onConfirm,
-  onCancel,
+  fileName, onConfirm, onCancel,
 }: {
   fileName: string;
   onConfirm: () => void;
@@ -177,10 +186,7 @@ function DeleteModal({
 }) {
   return createPortal(
     <>
-      <div
-        className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm"
-        onClick={onCancel}
-      />
+      <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm" onClick={onCancel} />
       <div className="fixed inset-0 z-[201] flex items-center justify-center p-4 pointer-events-none">
         <div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-[#0d0d1a] p-6 shadow-2xl shadow-black/70 pointer-events-auto">
           <div className="flex items-start gap-3 mb-4">
@@ -192,11 +198,9 @@ function DeleteModal({
               <p className="text-xs text-[--muted] mt-0.5 break-all leading-relaxed">{fileName}</p>
             </div>
           </div>
-
           <p className="text-xs text-[--muted-light] leading-relaxed mb-5">
             This action cannot be undone. The file and all its contents will be permanently deleted.
           </p>
-
           <div className="flex gap-2">
             <button
               type="button"
@@ -225,16 +229,18 @@ function DeleteModal({
 export default function FileExplorer({
   files,
   activeFileId,
+  pendingFileIds = [],
   onSelectFile,
   onNewFile,
   onRenameFile,
   onDeleteFile,
   onDuplicateFile,
 }: FileExplorerProps) {
-  const [menuOpenId, setMenuOpenId]       = useState<string | null>(null);
-  const [menuPos, setMenuPos]             = useState<MenuPos>({ right: 0, top: 0 });
-  const [renamingId, setRenamingId]       = useState<string | null>(null);
-  const [renameValue, setRenameValue]     = useState("");
+  const [menuOpenId, setMenuOpenId]           = useState<string | null>(null);
+  const [menuPos, setMenuPos]                 = useState<MenuPos>({ right: 0, top: 0 });
+  const [renamingId, setRenamingId]           = useState<string | null>(null);
+  const [renameValue, setRenameValue]         = useState("");
+  const [renameError, setRenameError]         = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Prevents blur from double-firing a commit after Enter/Escape already handled it
@@ -250,13 +256,16 @@ export default function FileExplorer({
   const startRename = useCallback((file: CodeFile) => {
     setRenamingId(file.id);
     setRenameValue(file.name);
+    setRenameError(null);
   }, []);
 
+  // Called only when the name is already validated
   const commitRename = useCallback((fileId: string, value: string) => {
     const trimmed = value.trim();
     const original = files.find((f) => f.id === fileId)?.name;
     if (trimmed && trimmed !== original) onRenameFile(fileId, trimmed);
     setRenamingId(null);
+    setRenameError(null);
   }, [files, onRenameFile]);
 
   const confirmDeleteFile = files.find((f) => f.id === confirmDeleteId) ?? null;
@@ -292,70 +301,104 @@ export default function FileExplorer({
           files.map((file) => {
             const isActive   = activeFileId === file.id;
             const isRenaming = renamingId === file.id;
+            const isPending  = pendingFileIds.includes(file.id);
 
             return (
-              <div
-                key={file.id}
-                className={`group relative flex items-center gap-2 px-3 py-2 rounded-lg mx-2 transition-colors ${
-                  isActive
-                    ? "bg-white/[0.08] text-[--accent]"
-                    : "text-[--muted-light] hover:bg-white/[0.05] hover:text-[--foreground]"
-                }`}
-                style={{ width: "calc(100% - 1rem)" }}
-              >
-                {/* File type icon */}
-                <span className="shrink-0 opacity-60 pointer-events-none">
-                  {fileIcon(isRenaming ? renameValue : file.name)}
-                </span>
+              <div key={file.id} className="mx-2" style={{ width: "calc(100% - 1rem)" }}>
+                {/* File row */}
+                <div
+                  className={`group relative flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                    isActive
+                      ? "bg-white/[0.08] text-[--accent]"
+                      : "text-[--muted-light] hover:bg-white/[0.05] hover:text-[--foreground]"
+                  }`}
+                >
+                  {/* File type icon */}
+                  <span className="shrink-0 opacity-60 pointer-events-none">
+                    {fileIcon(isRenaming ? renameValue : file.name)}
+                  </span>
 
-                {/* Name or rename input */}
-                {isRenaming ? (
-                  <input
-                    type="text"
-                    value={renameValue}
-                    autoFocus
-                    spellCheck={false}
-                    className="flex-1 min-w-0 bg-transparent border-0 border-b border-[--accent] outline-none ring-0 text-xs text-[--foreground] pb-px"
-                    style={{ caretColor: "var(--accent)" }}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        renameHandledRef.current = true;
-                        commitRename(file.id, renameValue);
-                      } else if (e.key === "Escape") {
-                        renameHandledRef.current = true;
-                        setRenamingId(null);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (!renameHandledRef.current) {
-                        commitRename(file.id, renameValue);
-                      }
-                      renameHandledRef.current = false;
-                    }}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => onSelectFile(file.id)}
-                    className="flex-1 min-w-0 text-xs text-left truncate cursor-pointer"
-                  >
-                    {file.name}
-                  </button>
-                )}
+                  {/* Name or rename input */}
+                  {isRenaming ? (
+                    <input
+                      type="text"
+                      value={renameValue}
+                      autoFocus
+                      spellCheck={false}
+                      className={`flex-1 min-w-0 bg-transparent border-0 border-b outline-none ring-0 text-xs text-[--foreground] pb-px ${
+                        renameError ? "border-red-500" : "border-[--accent]"
+                      }`}
+                      style={{ caretColor: "var(--accent)" }}
+                      onChange={(e) => {
+                        setRenameValue(e.target.value);
+                        setRenameError(null);
+                      }}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const err = validateName(renameValue, file.id, files);
+                          if (err) {
+                            setRenameError(err);
+                            return; // keep input open
+                          }
+                          renameHandledRef.current = true;
+                          commitRename(file.id, renameValue);
+                        } else if (e.key === "Escape") {
+                          renameHandledRef.current = true;
+                          setRenamingId(null);
+                          setRenameError(null);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!renameHandledRef.current) {
+                          const trimmed = renameValue.trim();
+                          const original = files.find((f) => f.id === file.id)?.name;
+                          // Only save if valid and different; silently cancel otherwise
+                          if (trimmed && trimmed !== original && !validateName(trimmed, file.id, files)) {
+                            commitRename(file.id, renameValue);
+                          } else {
+                            setRenamingId(null);
+                            setRenameError(null);
+                          }
+                        }
+                        renameHandledRef.current = false;
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => !isPending && onSelectFile(file.id)}
+                      className="flex-1 min-w-0 text-xs text-left truncate cursor-pointer"
+                    >
+                      {file.name}
+                    </button>
+                  )}
 
-                {/* ⋮ menu trigger — visible on row hover */}
-                {!isRenaming && (
-                  <button
-                    type="button"
-                    onClick={(e) => openMenu(e, file.id)}
-                    title="File options"
-                    className="shrink-0 flex items-center justify-center w-5 h-5 rounded-md opacity-0 group-hover:opacity-100 text-[--muted] hover:text-[--foreground] hover:bg-white/[0.08] transition-all cursor-pointer"
-                  >
-                    <IconMore />
-                  </button>
+                  {/* Right side: spinner (pending) or ⋮ button */}
+                  {!isRenaming && (
+                    isPending ? (
+                      <span className="shrink-0 flex items-center justify-center w-5 h-5">
+                        <Spinner />
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => openMenu(e, file.id)}
+                        title="File options"
+                        className="shrink-0 flex items-center justify-center w-5 h-5 rounded-md opacity-0 group-hover:opacity-100 text-[--muted] hover:text-[--foreground] hover:bg-white/[0.08] transition-all cursor-pointer"
+                      >
+                        <IconMore />
+                      </button>
+                    )
+                  )}
+                </div>
+
+                {/* Inline rename error — renders below the row */}
+                {isRenaming && renameError && (
+                  <p className="px-3 pt-1 pb-0.5 text-[10px] text-red-400 leading-tight">
+                    {renameError}
+                  </p>
                 )}
               </div>
             );
