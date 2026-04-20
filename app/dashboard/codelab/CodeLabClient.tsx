@@ -81,6 +81,15 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
 
   const saveTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showError = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3500);
+  }, []);
 
   const activeFile = files.find((f) => f.id === activeFileId) ?? null;
 
@@ -277,31 +286,76 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
     }
   }, [sessionId, files.length, user.id]);
 
-  // ── File management (local state only — API wired separately) ────────────
+  // ── File management ───────────────────────────────────────────────────────
 
-  const handleRenameFile = useCallback((id: string, newName: string) => {
+  const handleRenameFile = useCallback(async (id: string, newName: string) => {
+    const previous = files.find((f) => f.id === id);
+    if (!previous) return;
+
+    // Optimistic: rename immediately
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, name: newName } : f)));
-  }, []);
 
-  const handleDeleteFile = useCallback((id: string) => {
-    setFiles((prev) => {
-      const next = prev.filter((f) => f.id !== id);
-      if (activeFileId === id) setActiveFileId(next[0]?.id ?? null);
-      return next;
-    });
-  }, [activeFileId]);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/codelab/file/${id}/rename`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-user-id": user.id },
+        body: JSON.stringify({ name: newName }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { message?: string };
+        throw new Error(data.message ?? "Rename failed");
+      }
+    } catch (err) {
+      // Roll back to previous name
+      setFiles((prev) => prev.map((f) => (f.id === id ? previous : f)));
+      showError(err instanceof Error ? err.message : "Rename failed");
+    }
+  }, [files, user.id, showError]);
 
-  const handleDuplicateFile = useCallback((id: string) => {
-    const original = files.find((f) => f.id === id);
-    if (!original) return;
-    const dot = original.name.lastIndexOf(".");
-    const copyName = dot === -1
-      ? `${original.name}_copy`
-      : `${original.name.slice(0, dot)}_copy${original.name.slice(dot)}`;
-    const copy: CodeFile = { id: `local-copy-${Date.now()}`, name: copyName, content: original.content };
-    setFiles((prev) => [...prev, copy]);
-    setActiveFileId(copy.id);
-  }, [files]);
+  const handleDeleteFile = useCallback(async (id: string) => {
+    const snapshotFiles    = files;
+    const snapshotActiveId = activeFileId;
+
+    // Optimistic: remove file and navigate to the next available file
+    const nextFiles = snapshotFiles.filter((f) => f.id !== id);
+    setFiles(nextFiles);
+    if (snapshotActiveId === id) setActiveFileId(nextFiles[0]?.id ?? null);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/codelab/file/${id}`, {
+        method: "DELETE",
+        headers: { "x-user-id": user.id },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { message?: string };
+        throw new Error(data.message ?? "Delete failed");
+      }
+    } catch (err) {
+      // Roll back — restore files and re-select the deleted file
+      setFiles(snapshotFiles);
+      setActiveFileId(snapshotActiveId);
+      showError(err instanceof Error ? err.message : "Delete failed");
+    }
+  }, [files, activeFileId, user.id, showError]);
+
+  const handleDuplicateFile = useCallback(async (id: string) => {
+    // Not optimistic — need the server-assigned ID for the new file
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/codelab/file/${id}/duplicate`, {
+        method: "POST",
+        headers: { "x-user-id": user.id },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { message?: string };
+        throw new Error(data.message ?? "Duplicate failed");
+      }
+      const newFile = (await res.json()) as CodeFile;
+      setFiles((prev) => [...prev, newFile]);
+      setActiveFileId(newFile.id);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Duplicate failed");
+    }
+  }, [user.id, showError]);
 
   // ── Misc ──────────────────────────────────────────────────────────────────
 
@@ -440,6 +494,14 @@ export default function CodeLabClient({ user }: CodeLabClientProps) {
           </div>
         </div>
       </div>
+
+      {/* ── File op error toast ─────────────────────────────────────────────── */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#0d0d1a] border border-red-500/25 text-red-400 text-xs font-medium shadow-xl shadow-black/40 backdrop-blur-md whitespace-nowrap">
+          <span className="h-1.5 w-1.5 rounded-full bg-red-400 shrink-0" />
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
